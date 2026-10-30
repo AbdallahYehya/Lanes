@@ -7,7 +7,7 @@ const DEMO_LANES = [
     "id": "dQw4w9WgXcQ",
     "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
     "channel": "Rick Astley",
-    "duration": 1034,
+    "duration": 0,
     "views": 482113,
     "published": "2025-09-12"
    },
@@ -15,7 +15,7 @@ const DEMO_LANES = [
     "id": "9bZkp7q19f0",
     "title": "PSY - GANGNAM STYLE(강남스타일) M/V",
     "channel": "officialpsy",
-    "duration": 812,
+    "duration": 0,
     "views": 301877,
     "published": "2026-02-03"
    },
@@ -23,7 +23,7 @@ const DEMO_LANES = [
     "id": "jNQXAC9IVRw",
     "title": "Me at the zoo",
     "channel": "jawed",
-    "duration": 1260,
+    "duration": 0,
     "views": 96420,
     "published": "2025-06-18"
    },
@@ -31,7 +31,7 @@ const DEMO_LANES = [
     "id": "aqz-KE-bpKQ",
     "title": "Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film",
     "channel": "Blender",
-    "duration": 644,
+    "duration": 0,
     "views": 58210,
     "published": "2026-04-22"
    },
@@ -39,7 +39,7 @@ const DEMO_LANES = [
     "id": "kJQP7kiw5Fk",
     "title": "Luis Fonsi - Despacito ft. Daddy Yankee",
     "channel": "LuisFonsiVEVO",
-    "duration": 938,
+    "duration": 0,
     "views": 221045,
     "published": "2025-11-30"
    },
@@ -47,7 +47,7 @@ const DEMO_LANES = [
     "id": "OPf0YbXqDm0",
     "title": "Mark Ronson - Uptown Funk (Official Video) ft. Bruno Mars",
     "channel": "MarkRonsonVEVO",
-    "duration": 1187,
+    "duration": 0,
     "views": 740590,
     "published": "2026-08-14"
    },
@@ -55,7 +55,7 @@ const DEMO_LANES = [
     "id": "fJ9rUzIMcZQ",
     "title": "Queen – Bohemian Rhapsody (Official Video Remastered)",
     "channel": "Queen Official",
-    "duration": 1422,
+    "duration": 0,
     "views": 133905,
     "published": "2025-03-27"
    },
@@ -63,7 +63,7 @@ const DEMO_LANES = [
     "id": "hT_nvWreIhg",
     "title": "OneRepublic - Counting Stars",
     "channel": "OneRepublicVEVO",
-    "duration": 511,
+    "duration": 0,
     "views": 77802,
     "published": "2026-01-09"
    }
@@ -76,7 +76,7 @@ const DEMO_LANES = [
     "id": "JGwWNGJdvx8",
     "title": "Ed Sheeran - Shape of You (Official Music Video)",
     "channel": "Ed Sheeran",
-    "duration": 1103,
+    "duration": 0,
     "views": 412330,
     "published": "2026-05-16"
    },
@@ -84,7 +84,7 @@ const DEMO_LANES = [
     "id": "RgKAFK5djSk",
     "title": "Wiz Khalifa - See You Again ft. Charlie Puth [Official Video] Furious 7 Soundtrack",
     "channel": "Wiz Khalifa Music",
-    "duration": 1341,
+    "duration": 0,
     "views": 189276,
     "published": "2025-10-07"
    },
@@ -92,7 +92,7 @@ const DEMO_LANES = [
     "id": "LXb3EKWsInQ",
     "title": "COSTA RICA IN 4K 60fps HDR (ULTRA HD)",
     "channel": "Jacob + Katie Schwarz",
-    "duration": 1502,
+    "duration": 0,
     "views": 254019,
     "published": "2025-08-21"
    },
@@ -100,7 +100,7 @@ const DEMO_LANES = [
     "id": "YQHsXMglC9A",
     "title": "Adele - Hello (Official Music Video)",
     "channel": "Adele",
-    "duration": 602,
+    "duration": 0,
     "views": 176488,
     "published": "2026-01-28"
    },
@@ -108,7 +108,7 @@ const DEMO_LANES = [
     "id": "2Vv-BfVoq4g",
     "title": "Ed Sheeran - Perfect (Official Music Video)",
     "channel": "Ed Sheeran",
-    "duration": 1288,
+    "duration": 0,
     "views": 96035,
     "published": "2026-06-11"
    },
@@ -116,7 +116,7 @@ const DEMO_LANES = [
     "id": "e-ORhEE9VVg",
     "title": "Taylor Swift - Blank Space",
     "channel": "Taylor Swift",
-    "duration": 1067,
+    "duration": 0,
     "views": 308771,
     "published": "2026-03-05"
    },
@@ -124,7 +124,7 @@ const DEMO_LANES = [
     "id": "CevxZvSJLk8",
     "title": "Katy Perry - Roar",
     "channel": "KatyPerryVEVO",
-    "duration": 823,
+    "duration": 0,
     "views": 64519,
     "published": "2025-12-02"
    },
@@ -132,7 +132,7 @@ const DEMO_LANES = [
     "id": "60ItHLz5WEA",
     "title": "Alan Walker - Faded",
     "channel": "Alan Walker",
-    "duration": 956,
+    "duration": 0,
     "views": 143208,
     "published": "2026-07-19"
    }
@@ -145,7 +145,7 @@ const DEMO_LANES = [
     "id": "kXYiU_JCYtU",
     "title": "Numb (Official Music Video) [4K UPGRADE] – Linkin Park",
     "channel": "Linkin Park",
-    "duration": 418,
+    "duration": 0,
     "views": 512880,
     "published": "2025-05-10"
    },
@@ -153,7 +153,7 @@ const DEMO_LANES = [
     "id": "pRpeEdMmmQ0",
     "title": "Shakira - Waka Waka (This Time for Africa) (The Official 2010 FIFA World Cup™ Song)",
     "channel": "shakiraVEVO",
-    "duration": 690,
+    "duration": 0,
     "views": 233410,
     "published": "2026-02-14"
    },
@@ -161,7 +161,7 @@ const DEMO_LANES = [
     "id": "ktvTqknDobU",
     "title": "Imagine Dragons - Radioactive",
     "channel": "ImagineDragonsVEVO",
-    "duration": 1436,
+    "duration": 0,
     "views": 167552,
     "published": "2025-07-29"
    },
@@ -169,7 +169,7 @@ const DEMO_LANES = [
     "id": "hTWKbfoikeg",
     "title": "Nirvana - Smells Like Teen Spirit (Official Music Video)",
     "channel": "NirvanaVEVO",
-    "duration": 376,
+    "duration": 0,
     "views": 88214,
     "published": "2026-04-01"
    },
@@ -177,7 +177,7 @@ const DEMO_LANES = [
     "id": "YykjpeuMNEk",
     "title": "Coldplay - Hymn For The Weekend (Official Video)",
     "channel": "Coldplay",
-    "duration": 905,
+    "duration": 0,
     "views": 129760,
     "published": "2026-09-03"
    },
@@ -185,7 +185,7 @@ const DEMO_LANES = [
     "id": "3tmd-ClpJxA",
     "title": "Taylor Swift - Look What You Made Me Do",
     "channel": "Taylor Swift",
-    "duration": 1499,
+    "duration": 0,
     "views": 402118,
     "published": "2025-11-18"
    },
@@ -193,7 +193,7 @@ const DEMO_LANES = [
     "id": "uelHwf8o7_U",
     "title": "Eminem - Love The Way You Lie ft. Rihanna",
     "channel": "EminemVEVO",
-    "duration": 732,
+    "duration": 0,
     "views": 201066,
     "published": "2026-10-02"
    },
@@ -201,7 +201,7 @@ const DEMO_LANES = [
     "id": "fRh_vgS2dFE",
     "title": "Justin Bieber - Sorry (PURPOSE : The Movement)",
     "channel": "JustinBieberVEVO",
-    "duration": 289,
+    "duration": 0,
     "views": 71945,
     "published": "2026-06-25"
    }
@@ -214,7 +214,7 @@ const DEMO_LANES = [
     "id": "lp-EO5I60KA",
     "title": "Ed Sheeran - Thinking Out Loud (Official Music Video)",
     "channel": "Ed Sheeran",
-    "duration": 634,
+    "duration": 0,
     "views": 2104552,
     "published": "2026-05-27"
    },
@@ -222,7 +222,7 @@ const DEMO_LANES = [
     "id": "0KSOMA3QBU0",
     "title": "Katy Perry - Dark Horse ft. Juicy J",
     "channel": "KatyPerryVEVO",
-    "duration": 548,
+    "duration": 0,
     "views": 860311,
     "published": "2026-08-30"
    },
@@ -230,7 +230,7 @@ const DEMO_LANES = [
     "id": "SlPhMPnQ58k",
     "title": "Maroon 5 - Memories (Official Video)",
     "channel": "Maroon5VEVO",
-    "duration": 1215,
+    "duration": 0,
     "views": 327190,
     "published": "2025-12-16"
    },
@@ -238,7 +238,7 @@ const DEMO_LANES = [
     "id": "YVkUvmDQ3HY",
     "title": "Eminem - Without Me (Official Music Video)",
     "channel": "EminemVEVO",
-    "duration": 1044,
+    "duration": 0,
     "views": 1120640,
     "published": "2026-02-22"
    },
@@ -246,7 +246,7 @@ const DEMO_LANES = [
     "id": "Zi_XLOBDo_Y",
     "title": "Michael Jackson - Billie Jean (Official Video)",
     "channel": "michaeljacksonVEVO",
-    "duration": 401,
+    "duration": 0,
     "views": 455903,
     "published": "2025-09-25"
    },
@@ -254,7 +254,7 @@ const DEMO_LANES = [
     "id": "nfWlot6h_JM",
     "title": "Taylor Swift - Shake It Off",
     "channel": "Taylor Swift",
-    "duration": 477,
+    "duration": 0,
     "views": 298014,
     "published": "2026-03-18"
    },
@@ -262,7 +262,7 @@ const DEMO_LANES = [
     "id": "UF8uR6Z6KLc",
     "title": "Steve Jobs' 2005 Stanford Commencement Address",
     "channel": "Stanford",
-    "duration": 1320,
+    "duration": 0,
     "views": 612447,
     "published": "2025-04-08"
    },
@@ -270,7 +270,7 @@ const DEMO_LANES = [
     "id": "y6120QOlsfU",
     "title": "Darude - Sandstorm",
     "channel": "Darude",
-    "duration": 957,
+    "duration": 0,
     "views": 73220,
     "published": "2026-10-12"
    }

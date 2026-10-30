@@ -67,16 +67,18 @@ input,textarea{font:inherit}
 .zone.preview{width:auto;margin-left:calc(-1 * max(16px,var(--sar)));margin-right:calc(-1 * max(16px,var(--sal)));border-radius:0;box-shadow:none}
 .zone.poster{border-radius:22px;outline:1px solid var(--line);outline-offset:-1px}
 .zone img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-.zone.preview img.bg{animation:drift 9s ease-out both}
+.zone.preview img.bg{animation:drift 9s ease-out both;filter:brightness(.62) saturate(.85)}
 @keyframes drift{from{transform:scale(1.02)}to{transform:scale(1.12)}}
 
 .zone .prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(243,238,229,.12);z-index:3}
 .zone .prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
+.tag:empty{display:none!important}
+.zone .nopv{position:absolute;left:0;right:0;bottom:12px;z-index:3;text-align:center;font-size:13px;color:var(--fg);padding:0 24px}
+.zone.nopreview .prog{display:none}
 #players{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden}
 .slot{position:absolute;overflow:hidden;opacity:0;transition:opacity .45s;will-change:transform;background:#000}
 .slot.ready{opacity:1}
 .slot.current{z-index:2}
-.slot.parked{z-index:1;opacity:.01!important}
 .slot .host{position:absolute;inset:0}
 .slot .host iframe{position:absolute;left:0;top:-200px;width:100%;height:calc(100% + 400px);border:0;display:block}
 .slot .hud{position:absolute;inset:0;z-index:2;transition:opacity .5s}
@@ -96,6 +98,7 @@ input,textarea{font:inherit}
 .poster .rail button{width:46px;display:flex;flex-direction:column;align-items:center;gap:2px;font-family:var(--body);font-size:10px;font-weight:600;color:var(--fg)}
 .poster .rail span.ic{width:42px;height:42px;border-radius:50%;background:rgba(8,12,24,.55);border:1px solid rgba(243,238,229,.16);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:grid;place-items:center;transition:transform .15s,background .15s}
 .poster .rail button:active span.ic{transform:scale(.86)}
+.card.queued .poster .rail button.primary span.ic{background:var(--good);color:#06281c;box-shadow:0 6px 18px -6px var(--good)}
 .poster .rail button.primary span.ic{background:var(--accent);color:var(--accent-ink);border-color:transparent;box-shadow:0 6px 18px -6px var(--accent)}
 .poster .rail svg{width:20px;height:20px}
 /* details zone */
@@ -296,6 +299,8 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;back
       <div class="row"><div><b>Hide Shorts</b><small>Skip videos under 60 seconds</small></div><button class="switch" role="switch" aria-checked="true" id="swShorts"></button></div>
       <div class="row"><div><b>Hide live streams</b></div><button class="switch" role="switch" aria-checked="true" id="swLive"></button></div>
       <div class="row"><div><b>Don't repeat videos</b><small>Videos you scroll past stay hidden for 2 weeks</small></div><button class="switch" role="switch" aria-checked="true" id="swSeen"></button></div>
+      <div class="row"><div><b>Next video after adding</b><small>Move on automatically when you add a video to tonight</small></div><button class="switch" role="switch" aria-checked="false" id="swAdvance"></button></div>
+      <div class="row"><div><b>Preview playback</b><small id="pmHelp">Starts right away. YouTube's pause icon may show for a moment.</small></div><select id="selPreview" style="padding:8px 10px;border-radius:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line)"><option value="instant">Instant</option><option value="clean">Clean</option></select></div>
       <div class="row"><div><b>Preview start</b><small>Skip the intro</small></div><select id="selStart" style="padding:8px 10px;border-radius:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line)"><option value="0">From start</option><option value="10" selected>10% in</option><option value="20">20% in</option></select></div>
 
       <h4 class="sec">YouTube connection</h4>
@@ -364,7 +369,8 @@ const LS = {
   del(k){ try{ localStorage.removeItem('lanes:'+k);}catch(e){} }
 };
 const DAY = 864e5;
-const settings = Object.assign({ apiKey:'', clientId:'', hideShorts:true, hideLive:true, trackSeen:true, startPct:10, region:'QA' }, LS.get('settings', {}));
+const SESSION_START = Date.now();
+const settings = Object.assign({ apiKey:'', clientId:'', hideShorts:true, hideLive:true, trackSeen:true, startPct:10, region:'QA', autoAdvance:false, previewMode:'instant' }, LS.get('settings', {}));
 let lanes = LS.get('lanes', null);
 let laneIdx = LS.get('laneIdx', 0);
 let queue = LS.get('queue', []);
@@ -379,14 +385,17 @@ if(!lanes){
     ? DEMO_LANES.map(l => ({ id: uid(), type:'demo', label:l.label }))
     : defaultLanes();
 }
-function defaultLanes(){
-  return [
-    { id: uid(), type:'subs', label:'Subscriptions' },
-    { id: uid(), type:'trending', label:'Trending' },
-    { id: uid(), type:'liked', label:'Liked' },
-  ];
+function defaultLanes(){ return arrangeLanes([]); }
+// Lane order: Home, Subscriptions, your interests and topics, Trending, Liked.
+var LANE_ORDER={ home:0, subs:1, interest:2, search:3, channel:3, trending:4, liked:5 };
+var LANE_NAMES={ home:'Home', subs:'Subscriptions', trending:'Trending', liked:'Liked' };
+function arrangeLanes(list){
+  list=list.filter(l=>l.type!=='demo');
+  for(const t of ['home','subs','trending','liked']) if(!list.some(l=>l.type===t)) list.push({ id:uid(), type:t, label:LANE_NAMES[t] });
+  return list.map((l,i)=>[l,i]).sort((a,b)=>((LANE_ORDER[a[0].type]??3)-(LANE_ORDER[b[0].type]??3))||(a[1]-b[1])).map(x=>x[0]);
 }
 function uid(){ return Math.random().toString(36).slice(2,9); }
+if(!demoMode() && LS.get('laneLayout',1)<2){ lanes=arrangeLanes(lanes); laneIdx=0; LS.set('lanes',lanes); LS.set('laneIdx',0); LS.set('laneLayout',2); }
 // per-lane runtime (not persisted)
 const rt = {}; // laneId -> {items, cursor, pageToken, loading, done, error}
 function R(l){ return rt[l.id] || (rt[l.id] = { items:[], cursor:0, pageToken:null, loading:false, done:false, error:null }); }
@@ -398,7 +407,7 @@ function R(l){ return rt[l.id] || (rt[l.id] = { items:[], cursor:0, pageToken:nu
 const $ = s => document.querySelector(s);
 const H = () => $('#deck').clientHeight;
 const W = () => $('#deck').clientWidth;
-function fmtDur(s){ s=Math.round(s||0); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0'); }
+function fmtDur(s){ if(!s) return ''; s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0'); }
 function fmtViews(n){ n=+n||0; if(n>=1e9) return (n/1e9).toFixed(1)+'B'; if(n>=1e6) return (n/1e6).toFixed(n<1e7?1:0)+'M'; if(n>=1e3) return (n/1e3).toFixed(n<1e4?1:0)+'K'; return String(n); }
 function fmtAge(iso){ if(!iso) return ''; const d=(Date.now()-new Date(iso))/DAY; if(d<1) return 'today'; if(d<30) return Math.floor(d)+'d ago'; if(d<365) return Math.floor(d/30)+'mo ago'; return Math.floor(d/365)+'y ago'; }
 function isoDur(s){ const m=/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(s||''); return m? (+m[1]||0)*3600+(+m[2]||0)*60+(+m[3]||0) : 0; }
@@ -412,8 +421,7 @@ function toast(msg, action, fn){
 function visibleItems(l){ const r=R(l); return r.items; }
 function allowed(v){
   if(hidden[v.id]) return false;
-  if(queue.some(q=>q.id===v.id)) return false;
-  if(settings.trackSeen && seen[v.id] && !demoMode()) return false;
+  if(settings.trackSeen && seen[v.id] && seen[v.id] < SESSION_START && !demoMode()) return false; // only videos from earlier sessions; tonight's list stays stable
   if(settings.hideShorts && v.duration>0 && v.duration<=60) return false;
   if(settings.hideShorts && /#shorts/i.test(v.title)) return false;
   if(settings.hideLive && v.live) return false;
@@ -459,48 +467,96 @@ async function hydrate(ids){ // ids -> full video objects (batched 50)
   }
   return out;
 }
-const cache = { get(k){ const c=LS.get('cache:'+k,null); return c && Date.now()-c.t < 20*60e3 ? c.v : null; }, set(k,v){ LS.set('cache:'+k,{t:Date.now(),v}); } };
+const cache = { get(k, ttl){ const c=LS.get('cache:'+k,null); return c && Date.now()-c.t < (ttl||20*60e3) ? c.v : null; }, set(k,v){ LS.set('cache:'+k,{t:Date.now(),v}); } };
 
+async function subChannels(){
+  let c=cache.get('subsChans', 6*3600e3); if(c) return c;
+  const chans=[]; let pt=null;
+  do{ const j=await yt('subscriptions',{ part:'snippet', mine:true, maxResults:50, pageToken:pt },{auth:true}); chans.push(...(j.items||[]).map(s=>s.snippet.resourceId.channelId)); pt=j.nextPageToken; }while(pt && chans.length<400);
+  cache.set('subsChans', chans); return chans;
+}
+async function subsVideos(){
+  let all=cache.get('subs'); if(all) return all;
+  const chans=await subChannels(); const uploads=[];
+  for(let i=0;i<chans.length;i+=50){ const j=await yt('channels',{ part:'contentDetails', id:chans.slice(i,i+50).join(','), maxResults:50 }); uploads.push(...(j.items||[]).map(c=>c.contentDetails.relatedPlaylists.uploads)); }
+  const ids=[];
+  await Promise.all(uploads.map(async u=>{ try{ const j=await yt('playlistItems',{ part:'contentDetails', playlistId:u, maxResults:4 }); (j.items||[]).forEach(x=>ids.push({id:x.contentDetails.videoId, at:x.contentDetails.videoPublishedAt||''})); }catch(e){} }));
+  ids.sort((a,b)=> (b.at>a.at?1:-1));
+  all=await hydrate(ids.slice(0,300).map(x=>x.id)); all.sort((a,b)=> (b.published>a.published?1:-1));
+  cache.set('subs', all); return all;
+}
+async function trendingPage(pageToken){
+  const key='trend:'+(settings.region||'QA'); if(!pageToken){ const c=cache.get(key); if(c) return c; }
+  let j; try{ j=await yt('videos',{ part:'snippet,contentDetails,statistics', chart:'mostPopular', regionCode:settings.region||'QA', maxResults:50, pageToken }); }
+  catch(e){ if(!/region/i.test(e.message)) throw e; j=await yt('videos',{ part:'snippet,contentDetails,statistics', chart:'mostPopular', regionCode:'US', maxResults:50, pageToken }); }
+  const out={ vids:(j.items||[]).map(mapVideo), next:j.nextPageToken||null }; if(!pageToken) cache.set(key,out); return out;
+}
+async function searchPage(q, order, recent, pageToken){
+  const key='q:'+q+'|'+(order||'relevance')+'|'+(recent?1:0); if(!pageToken){ const c=cache.get(key); if(c) return c; }
+  const j=await yt('search',{ part:'snippet', q, type:'video', order:order||'relevance', maxResults:50, safeSearch:'none', pageToken, relevanceLanguage:'en', regionCode:settings.region||undefined,
+    publishedAfter: recent? new Date(Date.now()-45*DAY).toISOString() : undefined });
+  const ids=(j.items||[]).map(x=>x.id&&x.id.videoId).filter(Boolean);
+  const out={ vids:await hydrate(ids), next:j.nextPageToken||null }; if(!pageToken) cache.set(key,out); return out;
+}
+// Home: YouTube doesn't share its real Home feed with apps, so mix the user's own signals.
+async function homeMix(){
+  const topics=lanes.filter(x=>x.type==='interest'||x.type==='search').slice(0,3);
+  const jobs=[ tokenValid()? subsVideos() : Promise.resolve([]) ];
+  topics.forEach(t=>jobs.push(searchPage(t.q, t.order, t.type==='interest').then(r=>r.vids)));
+  jobs.push(trendingPage(null).then(r=>r.vids));
+  const res=await Promise.allSettled(jobs);
+  const lists=res.map(r=>r.status==='fulfilled'?r.value:[]);
+  if(lists.every(l=>!l.length)){ const bad=res.find(r=>r.status==='rejected'); if(bad) throw bad.reason; }
+  const out=[], seenIds=new Set(), ptr=lists.map(()=>0);
+  const take=(k)=>{ const L=lists[k]; while(ptr[k]<L.length){ const v=L[ptr[k]++]; if(!seenIds.has(v.id)){ seenIds.add(v.id); out.push(v); return true; } } return false; };
+  for(let round=0; round<60; round++){ let any=false; any=take(0)||any; any=take(0)||any; for(let k=1;k<lists.length;k++) any=take(k)||any; if(!any) break; }
+  return out;
+}
+// Interests: the topics YouTube tags on the channels you subscribe to.
+const TOPIC_LABELS={ Association_football:'Football', American_football:'NFL', Basketball:'Basketball', Tennis:'Tennis', Golf:'Golf', Boxing:'Boxing', Mixed_martial_arts:'MMA', Motorsport:'Motorsport', Cricket:'Cricket', Baseball:'Baseball', Ice_hockey:'Hockey', Volleyball:'Volleyball', Sport:'Sports',
+  Video_game_culture:'Gaming', Action_game:'Gaming', 'Action-adventure_game':'Gaming', 'Role-playing_video_game':'Gaming', Strategy_video_game:'Gaming', Sports_game:'Gaming', Racing_video_game:'Racing games', Simulation_video_game:'Gaming', Puzzle_video_game:'Gaming', Casual_game:'Gaming', Music_video_game:'Gaming',
+  Music:'Music', Pop_music:'Pop music', Hip_hop_music:'Hip hop', Electronic_music:'Electronic music', Rock_music:'Rock', Jazz:'Jazz', Classical_music:'Classical music', Country_music:'Country', Rhythm_and_blues:'R&B', Reggae:'Reggae', Soul_music:'Soul', Independent_music:'Indie music', Christian_music:'Christian music', Music_of_Asia:'Asian music', Music_of_Latin_America:'Latin music',
+  Technology:'Tech', Vehicle:'Cars', Automobile:'Cars', Food:'Food', Physical_fitness:'Fitness', Health:'Health', Fashion:'Fashion', Physical_attractiveness:'Beauty', Tourism:'Travel', Pet:'Pets', Hobby:'Hobbies',
+  Film:'Film', Television_program:'TV shows', Humour:'Comedy', Performing_arts:'Performing arts', Entertainment:'Entertainment', Knowledge:'Learning', Business:'Business', Politics:'News', Society:'Society', Military:'Military', Religion:'Religion', 'Lifestyle_(sociology)':'Lifestyle' };
+const BROAD=new Set(['Entertainment','Lifestyle','Society','Learning','Hobbies','Music','Sports','Gaming']);
+async function discoverInterests(force){
+  if(demoMode()||!tokenValid()) return;
+  if(!force && Date.now()-LS.get('interestsAt',0) < 3*DAY && lanes.some(l=>l.type==='interest')) return;
+  const chans=(await subChannels()).slice(0,200); const counts={};
+  for(let i=0;i<chans.length;i+=50){ const j=await yt('channels',{ part:'topicDetails', id:chans.slice(i,i+50).join(','), maxResults:50 });
+    (j.items||[]).forEach(c=>{ new Set(((c.topicDetails||{}).topicCategories||[]).map(u=>TOPIC_LABELS[decodeURIComponent(u.split('/wiki/')[1]||'')]).filter(Boolean)).forEach(t=>counts[t]=(counts[t]||0)+1); }); }
+  let ranked=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  ranked=[...ranked.filter(t=>!BROAD.has(t)), ...ranked.filter(t=>BROAD.has(t))].slice(0,4);
+  LS.set('interestsAt', Date.now()); if(!ranked.length) return;
+  const curId=(lanes[laneIdx]||{}).id;
+  let next=lanes.filter(l=>l.type!=='interest' || ranked.includes(l.label));
+  const at=Math.max(0, ...next.map((l,i)=>['home','subs','interest'].includes(l.type)?i+1:0));
+  const add=ranked.filter(t=>!next.some(l=>(l.type==='interest'&&l.label===t)||(l.type==='search'&&(l.q||'').toLowerCase()===t.toLowerCase()))).map(t=>({ id:uid(), type:'interest', label:t, q:t }));
+  next.splice(at,0,...add); lanes=next;
+  laneIdx=Math.max(0, lanes.findIndex(l=>l.id===curId)); saveLanes(); LS.set('laneIdx',laneIdx);
+  const home=lanes.find(l=>l.type==='home'); if(home && rt[home.id] && !R(home).items.length) delete rt[home.id];
+  if(!drag) render();
+}
 async function fetchLane(l){
   const r=R(l); if(r.loading||r.done) return; r.loading=true; r.error=null;
   await Promise.resolve(); // never run inside a render() call
   try{
     let vids=[], next=null;
     if(l.type==='demo'){ const d=DEMO_LANES.find(x=>x.label===l.label); vids=(d?d.items:[]).map(v=>({...v})); r.done=true; }
-    else if(l.type==='trending'){
-      let j; try{ j=await yt('videos',{ part:'snippet,contentDetails,statistics', chart:'mostPopular', regionCode:settings.region||'QA', maxResults:50, pageToken:r.pageToken }); }
-      catch(e){ if(!/region/i.test(e.message)) throw e; j=await yt('videos',{ part:'snippet,contentDetails,statistics', chart:'mostPopular', regionCode:'US', maxResults:50, pageToken:r.pageToken }); }
-      vids=(j.items||[]).map(mapVideo); next=j.nextPageToken||null;
-    }
+    else if(l.type==='home'){ vids=await homeMix(); r.done=true; }
+    else if(l.type==='trending'){ const o=await trendingPage(r.pageToken); vids=o.vids; next=o.next; }
     else if(l.type==='liked'){
       const j=await yt('videos',{ part:'snippet,contentDetails,statistics', myRating:'like', maxResults:50, pageToken:r.pageToken },{auth:true});
       vids=(j.items||[]).map(mapVideo); next=j.nextPageToken||null;
     }
-    else if(l.type==='search'){
-      const j=await yt('search',{ part:'snippet', q:l.q, type:'video', order:l.order||'relevance', maxResults:50, safeSearch:'none', pageToken:r.pageToken, relevanceLanguage:'en' });
-      const ids=(j.items||[]).map(x=>x.id&&x.id.videoId).filter(Boolean); vids=await hydrate(ids); next=j.nextPageToken||null;
-    }
+    else if(l.type==='search'||l.type==='interest'){ const o=await searchPage(l.q, l.order, l.type==='interest', r.pageToken); vids=o.vids; next=o.next; }
     else if(l.type==='channel'){
       if(!l.uploads){ const c=await yt('channels',{ part:'contentDetails,snippet', forHandle:l.q.replace(/^@/,'') }); const ch=(c.items||[])[0]; if(!ch) throw new Error('Channel not found'); l.uploads=ch.contentDetails.relatedPlaylists.uploads; l.label=ch.snippet.title; saveLanes(); renderTabs(); }
       const j=await yt('playlistItems',{ part:'contentDetails', playlistId:l.uploads, maxResults:50, pageToken:r.pageToken });
       const ids=(j.items||[]).map(x=>x.contentDetails.videoId); vids=await hydrate(ids); next=j.nextPageToken||null;
     }
-    else if(l.type==='subs'){
-      let all=cache.get('subs');
-      if(!all){
-        const chans=[]; let pt=null;
-        do{ const j=await yt('subscriptions',{ part:'snippet', mine:true, maxResults:50, pageToken:pt },{auth:true}); chans.push(...(j.items||[]).map(s=>s.snippet.resourceId.channelId)); pt=j.nextPageToken; }while(pt && chans.length<400);
-        const uploads=[];
-        for(let i=0;i<chans.length;i+=50){ const j=await yt('channels',{ part:'contentDetails', id:chans.slice(i,i+50).join(','), maxResults:50 }); uploads.push(...(j.items||[]).map(c=>c.contentDetails.relatedPlaylists.uploads)); }
-        const ids=[]; const lim=8;
-        await Promise.all(uploads.map(async u=>{ try{ const j=await yt('playlistItems',{ part:'contentDetails', playlistId:u, maxResults:4 }); (j.items||[]).forEach(x=>ids.push({id:x.contentDetails.videoId, at:x.contentDetails.videoPublishedAt||''})); }catch(e){} }));
-        ids.sort((a,b)=> (b.at>a.at?1:-1));
-        all=await hydrate(ids.slice(0,300).map(x=>x.id)); all.sort((a,b)=> (b.published>a.published?1:-1));
-        cache.set('subs', all);
-      }
-      vids=all; r.done=true;
-    }
-    r.pageToken=next; if(!next) r.done=true;
+    else if(l.type==='subs'){ vids=await subsVideos(); r.done=true; }
+    if(l.type!=='home'&&l.type!=='subs'){ r.pageToken=next; if(!next) r.done=true; }
     const have=new Set(r.items.map(v=>v.id));
     vids.forEach(v=>{ if(!have.has(v.id)) { r.items.push(v); have.add(v.id);} });
     loadChannels(vids).then(()=>{ if(lanes[laneIdx]===l) refreshChannelInfo(); });
@@ -521,6 +577,7 @@ function recompute(l){ // keep cursorV (index into filtered list) consistent
   const r=R(l); const list=r.items.filter(allowed); if(r.cursorV==null) r.cursorV=0; if(r.cursorV>list.length-1) r.cursorV=Math.max(0,list.length-1); if(!r.done && !r.error && !r.loading && list.length-r.cursorV<5) fetchLane(l); return list; }
 
 const ICON={
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   hide:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10 10 0 0 1 2 12s2.5-5 7-6.6M9.9 4.2A10 10 0 0 1 22 12a14 14 0 0 1-2.1 3M1 1l22 22"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/></svg>',
   open:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>',
@@ -544,7 +601,7 @@ function cardEl(v, l, state){ // state: 'skeleton' | 'empty' | 'error'
   const ch=chan[v.channelId]||{};
   const img=`<img class="bg" src="${thumb(v.id,true)}" alt="" onload="if(this.naturalWidth<=120&&!this.dataset.f){this.dataset.f=1;this.src='${thumb(v.id,false)}'}" onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${thumb(v.id,false)}'}">`;
   el.innerHTML=`<div class="ambient" style="background-image:url('${thumb(v.id,false)}')"></div>
-    <div class="zone preview">${img}<div class="prog"><i></i></div><div class="shield"></div>
+    <div class="zone preview"><img class="bg frame" src="https://i.ytimg.com/vi/${v.id}/hq2.jpg" alt="" onerror="this.onerror=null;this.src='${thumb(v.id,false)}'"><div class="prog"><i></i></div><div class="shield"></div>
       <span class="tag tl"><span class="dot"></span><span class="tagtxt">Preview</span></span><span class="tag tr">${fmtDur(v.duration)}</span>
 </div>
     <div class="zone poster">${img}<div class="shade"></div><h2>${esc(v.title)}</h2>
@@ -603,7 +660,7 @@ function render(){
   tf={x:0,y:0}; place();
   // prefetch next thumbnails
   if(l){ const list=R(l).items.filter(allowed); for(let i=1;i<=3;i++){ const v=list[(R(l).cursorV||0)+i]; if(v){ const im=new Image(); im.src=thumb(v.id,true);} } }
-  renderTabs(); assignPlayers(); scheduleComments();
+  renderTabs(); markQueued(); assignPlayers(); scheduleComments();
   $('#hint').style.opacity = LS.get('swipes',0)>8 ? 0 : 1;
 }
 function refreshChannelInfo(){ for(const k in cards){ const el=cards[k], v=el._video; if(!v) continue; const ch=chan[v.channelId]; if(!ch) continue; const a=el.querySelector('.ava'); if(a&&ch.avatar&&!a.querySelector('img')) a.innerHTML=`<img src="${ch.avatar}" alt="">`; const sm=el.querySelector('.cn small'); if(sm&&ch.subs){ sm.textContent=fmtViews(ch.subs)+' subscribers'; sm.hidden=false; } } }
@@ -617,7 +674,8 @@ function renderIfSkeleton(l){ if(lanes[laneIdx]===l && cards.v0 && cards.v0.clas
    so it's already past YouTube's startup overlays when you swipe to it.
    Swapping just exchanges roles; iframes are never rebuilt or moved. */
 let ytReady=false, muted=true, slots=[], curSlot=null, nxtSlot=null;
-const READY_AFTER=3.6; // seconds of real playback before a slot is shown clean
+// Instant: show the video as soon as frames move. Clean: wait until YouTube's own icons fade.
+const readyAfter=()=> settings.previewMode==='clean' ? 3.6 : 0.25;
 window.onYouTubeIframeAPIReady=()=>{ ytReady=true; assignPlayers(); };
 (function loadYT(){ const s=document.createElement('script'); s.src='https://www.youtube.com/iframe_api'; document.head.appendChild(s); })();
 const layer=document.createElement('div'); layer.id='players'; $('#stage').insertBefore(layer, $('#top'));
@@ -625,49 +683,64 @@ function makeSlot(){
   const el=document.createElement('div'); el.className='slot';
   el.innerHTML='<div class="host"></div><div class="hud"><span class="tag tr"></span><div class="soundhint">'+ICON.sound+'<span>tap for sound</span></div></div>';
   layer.appendChild(el);
-  return { el, player:null, ok:false, vid:null, ready:false, poll:null, pending:null };
+  return { el, player:null, ok:false, vid:null, ready:false, poll:null, pending:null, wantPlay:false };
 }
-function slotPlay(slot, v){
-  slot.vid=v.id; slot.ready=false; slot.el.classList.remove('ready','clean'); clearInterval(slot.poll); slot.poll=null;
+// Load a video into a slot. play=false only cues it (loads, stays still) so a swipe can start it at once.
+function slotLoad(slot, v, play){
+  slot.failed=null; slot.vid=v.id; slot.ready=false; slot.wantPlay=play; slot.el.classList.remove('ready','clean'); clearInterval(slot.poll); slot.poll=null;
   slot.el.querySelector('.tag.tr').textContent=fmtDur(v.duration);
-  const start=Math.floor((v.duration||0)*(settings.startPct/100));
+  const start=(v.duration||0)>=120 ? Math.floor(v.duration*(settings.startPct/100)) : 0; const spec={ videoId:v.id, startSeconds:start };
   if(!slot.player){
     const div=document.createElement('div'); slot.el.querySelector('.host').appendChild(div);
-    slot.player=new YT.Player(div,{ videoId:v.id, playerVars:{ autoplay:1, mute:1, controls:0, playsinline:1, start, rel:0, modestbranding:1, iv_load_policy:3, disablekb:1, fs:0, cc_load_policy:0 },
+    slot.player=new YT.Player(div,{ videoId:v.id, playerVars:{ autoplay:play?1:0, mute:1, controls:0, playsinline:1, start, rel:0, modestbranding:1, iv_load_policy:3, disablekb:1, fs:0, cc_load_policy:0 },
       events:{
         onReady:e=>{ slot.ok=true; e.target.mute(); try{ e.target.unloadModule('captions'); e.target.unloadModule('cc'); }catch(_){}
-          if(slot.pending){ const p=slot.pending; slot.pending=null; e.target.loadVideoById(p); } else e.target.playVideo(); },
-        onStateChange:e=>{ if(e.data===YT.PlayerState.PLAYING) watchReady(slot); if(e.data===YT.PlayerState.ENDED){ try{ e.target.seekTo(0); e.target.playVideo(); }catch(_){} } }
+          if(slot.pending){ const p=slot.pending; slot.pending=null; slot.wantPlay? e.target.loadVideoById(p) : e.target.cueVideoById(p); }
+          else if(slot.wantPlay) e.target.playVideo(); },
+        onStateChange:e=>{
+          if(e.data===YT.PlayerState.PLAYING){ if(slot!==curSlot){ try{ e.target.pauseVideo(); }catch(_){} return; } watchReady(slot); }
+          if(e.data===YT.PlayerState.ENDED){ try{ e.target.seekTo(0); e.target.playVideo(); }catch(_){} } },
+        onError:e=>{ slot.failed=slot.vid; clearTimeout(slot._guard); if(slot===curSlot) showNoPreview(); }
       } });
-  } else if(!slot.ok){ slot.pending={ videoId:v.id, startSeconds:start }; }
-  else { try{ slot.player.mute(); slot.player.loadVideoById({ videoId:v.id, startSeconds:start }); }catch(_){} }
+  } else if(!slot.ok){ slot.pending=spec; }
+  else { try{ slot.player.mute(); play? slot.player.loadVideoById(spec) : slot.player.cueVideoById(spec); }catch(_){} }
 }
+function showNoPreview(){ const z=cards.v0&&cards.v0.querySelector('.zone.preview'); if(!z||z.querySelector('.nopv')) return;
+  z.classList.add('nopreview'); const d=document.createElement('div'); d.className='nopv'; d.textContent='Preview not available here. Tap Open to watch on YouTube.'; z.appendChild(d); }
+function slotStart(slot){ slot.wantPlay=true; if(slot.ok){ try{ slot.player.playVideo(); }catch(_){} } guard(slot); }
+function guard(slot){ clearTimeout(slot._guard); const want=slot.vid;
+  slot._guard=setTimeout(()=>{ if(slot!==curSlot||slot.vid!==want||slot.ready||!slot.ok||slot.failed===want) return; let st=-1; try{ st=slot.player.getPlayerState(); }catch(_){}
+    if(st!==1){ try{ slot.player.loadVideoById({ videoId:want, startSeconds:0 }); }catch(_){} } },3000); }
+function slotPause(slot){ slot.wantPlay=false; clearInterval(slot.poll); slot.poll=null; if(slot.ok){ try{ slot.player.pauseVideo(); }catch(_){} } }
 function watchReady(slot){
-  if(slot.ready||slot.poll) return; const want=slot.vid; let t0=null;
+  if(slot.ready||slot.poll) return; const want=slot.vid; let t0=null; const need=readyAfter();
   slot.poll=setInterval(()=>{
     if(slot.vid!==want){ clearInterval(slot.poll); slot.poll=null; return; }
     let ct=0, id=''; try{ ct=slot.player.getCurrentTime(); id=(slot.player.getVideoData()||{}).video_id; }catch(_){ return; }
     if(id && id!==want) return; if(t0===null) t0=ct;
-    if(slot===curSlot&&cards.v0){ const bar=cards.v0.querySelector('.prog i'); if(bar) bar.style.width=Math.min(100,15+85*(ct-t0)/READY_AFTER)+'%'; }
-    if(ct-t0>=READY_AFTER){ clearInterval(slot.poll); slot.poll=null; slot.ready=true; slot.el.classList.add('ready'); if(slot===curSlot) flashHud(slot); }
-  },200);
+    if(slot===curSlot&&cards.v0){ const bar=cards.v0.querySelector('.prog i'); if(bar) bar.style.width=Math.min(100,15+85*(ct-t0)/need)+'%'; }
+    if(ct-t0>=need){ clearInterval(slot.poll); slot.poll=null; slot.ready=true; slot.el.classList.add('ready'); if(slot===curSlot) flashHud(slot); }
+  },100);
 }
 function flashHud(slot){ slot.el.classList.remove('clean'); clearTimeout(slot._hud); slot._hud=setTimeout(()=>slot.el.classList.add('clean'),2200); }
-function stopSlot(slot){ slot.vid=null; slot.ready=false; slot.el.classList.remove('ready'); clearInterval(slot.poll); slot.poll=null; try{ slot.ok&&slot.player.pauseVideo(); }catch(_){} }
+function stopSlot(slot){ slot.vid=null; slot.ready=false; slot.el.classList.remove('ready'); slotPause(slot); }
 function assignPlayers(){
   if(!ytReady) return;
   if(!slots.length) slots=[makeSlot(),makeSlot()];
   const cur=cards.v0&&cards.v0._video, nxt=cards.v1&&cards.v1._video;
   let A = cur ? slots.find(s=>s.vid===cur.id) : null;
-  if(cur && !A){ A = slots.find(s=>!(nxt&&s.vid===nxt.id)) || slots[0]; slotPlay(A,cur); }
+  const reuse = !!A;
+  if(cur && !A){ A = slots.find(s=>!(nxt&&s.vid===nxt.id)) || slots[0]; }
   const B = slots.find(s=>s!==A);
-  if(nxt){ if(B.vid!==nxt.id) slotPlay(B,nxt); } else stopSlot(B);
-  if(!cur && A) stopSlot(A);
   const changed = curSlot!==A;
   curSlot=A||null; nxtSlot=B;
-  slots.forEach(s=>{ s.el.classList.toggle('current', s===curSlot); try{ if(s.ok){ if(s===curSlot && !muted){ s.player.unMute(); s.player.setVolume(100);} else s.player.mute(); if(s.vid) s.player.playVideo(); } }catch(_){} });
+  // only one YouTube player may play at a time on phones: pause the other one first
+  slotPause(B);
+  if(cur){ if(reuse && A.failed===cur.id) showNoPreview(); else if(reuse) slotStart(A); else { A.failed=null; slotLoad(A,cur,true); guard(A); } } else if(A) stopSlot(A);
+  if(nxt){ if(B.vid!==nxt.id) slotLoad(B,nxt,false); } else stopSlot(B);
+  slots.forEach(s=>{ s.el.classList.toggle('current', s===curSlot); try{ if(s.ok){ if(s===curSlot && !muted){ s.player.unMute(); s.player.setVolume(100);} else s.player.mute(); } }catch(_){} });
   if(curSlot && curSlot.ready && changed) flashHud(curSlot);
-  if(curSlot && !curSlot.ready && cards.v0){ const bar=cards.v0.querySelector('.prog i'); if(bar) requestAnimationFrame(()=>bar.style.width='8%'); }
+  if(curSlot && !curSlot.ready && cards.v0){ const bar=cards.v0.querySelector('.prog i'); if(bar) requestAnimationFrame(()=>bar.style.width='10%'); }
   positionSlots();
 }
 function positionSlots(){
@@ -677,12 +750,7 @@ function positionSlots(){
     const card = key && cards[key]; const zz = card && card.querySelector('.zone.preview');
     if(!zz){ s.el.style.visibility='hidden'; return; }
     s.el.style.visibility=''; s.el.style.left=zz.offsetLeft+'px'; s.el.style.top=zz.offsetTop+'px'; s.el.style.width=zz.offsetWidth+'px'; s.el.style.height=zz.offsetHeight+'px';
-    // At rest the warming slot hides directly behind the current preview (still "on screen",
-    // so the browser keeps it playing); while swiping it rides along with its own card.
-    const atRest = !tf.x && !tf.y && !card.style.transition;
-    const parked = s===nxtSlot && atRest && z;
-    s.el.classList.toggle('parked', !!parked);
-    s.el.style.transform = parked ? cards.v0.style.transform : card.style.transform;
+    s.el.style.transform = card.style.transform;
     s.el.style.transition = card.style.transition;
   });
 }
@@ -743,14 +811,18 @@ window.addEventListener('keydown', e=>{ if(['INPUT','SELECT','TEXTAREA'].include
 
 /* ===================== actions ===================== */
 function curVideo(){ return cards.v0 && cards.v0._video || null; }
+function inQueue(id){ return queue.some(q=>q.id===id); }
+function markQueued(){ for(const k in cards){ const el=cards[k], v=el._video; if(!v) continue; const on=inQueue(v.id); el.classList.toggle('queued',on); const b=el.querySelector('[data-act="queue"]'); if(b) b.innerHTML=`<span class="ic">${on?ICON.check:ICON.plus}</span>${on?'Added':'Queue'}`; } }
 function queueCurrent(pop){
   const v=curVideo(); if(!v) return;
-  if(queue.some(q=>q.id===v.id)){ toast('Already in tonight\'s queue'); return; }
-  queue.push({ id:v.id, title:v.title, channel:v.channel, duration:v.duration }); LS.set('queue',queue); updateQ(); vibrate(12);
-  if(pop){ const st=cards.v0.querySelector('.stamp'); st.classList.remove('go'); void st.offsetWidth; st.classList.add('go'); }
+  if(inQueue(v.id)){ // second double-tap takes it back out
+    queue=queue.filter(q=>q.id!==v.id); LS.set('queue',queue); updateQ(); markQueued(); vibrate(8); toast('Removed from tonight'); return; }
+  queue.push({ id:v.id, title:v.title, channel:v.channel, duration:v.duration }); LS.set('queue',queue); updateQ(); markQueued(); vibrate(12);
+  if(pop){ const st=cards.v0.querySelector('.stamp'); st.classList.remove('go','hide'); st.querySelector('.pop').innerHTML=ICON.plus; void st.offsetWidth; st.classList.add('go'); }
   const n=$('#qcount'); n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump');
-  setTimeout(()=>{ if(cards.v1) animateTo(0,-H(),()=>{ R(current()).cursorV+=0; render(); }); else render(); }, pop?450:150);
-  // the queued video is now filtered out, so cursor stays and the next item slides in
+  if(settings.autoAdvance && cards.v1){
+    setTimeout(()=>animateTo(0,-H(),()=>{ const r=R(current()); if(settings.trackSeen){ seen[v.id]=Date.now(); LS.set('seen',seen); } r.cursorV+=1; render(); }), pop?450:150);
+  }
 }
 function hideCurrent(){
   const v=curVideo(); if(!v) return; hidden[v.id]=Date.now(); LS.set('hidden',hidden); vibrate([10,30,10]);
@@ -779,7 +851,7 @@ $('#laneQ').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefaul
 function renderLaneManage(){
   const m=$('#laneManage'); m.innerHTML='';
   lanes.forEach((l,i)=>{ const row=document.createElement('div'); row.className='row';
-    row.innerHTML=`<div><b>${esc(l.label)}</b><small>${l.type==='search'?'Topic: '+esc({relevance:'most relevant',date:'newest',viewCount:'most viewed'}[l.order||'relevance']):l.type==='channel'?'Channel':l.type==='demo'?'Demo':'Built in'}</small></div><div style="display:flex;gap:6px"><button class="btn" data-mv="-1" ${i===0?'disabled':''}>↑</button><button class="btn" data-mv="1" ${i===lanes.length-1?'disabled':''}>↓</button><button class="btn" data-del="1">✕</button></div>`;
+    row.innerHTML=`<div><b>${esc(l.label)}</b><small>${l.type==='home'?'Mix of subscriptions, interests and trending':l.type==='interest'?'From the channels you subscribe to':l.type==='search'?'Topic: '+esc({relevance:'most relevant',date:'newest',viewCount:'most viewed'}[l.order||'relevance']):l.type==='channel'?'Channel':l.type==='demo'?'Demo':'Built in'}</small></div><div style="display:flex;gap:6px"><button class="btn" data-mv="-1" ${i===0?'disabled':''}>↑</button><button class="btn" data-mv="1" ${i===lanes.length-1?'disabled':''}>↓</button><button class="btn" data-del="1">✕</button></div>`;
     row.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{ const j=i+(+b.dataset.mv); [lanes[i],lanes[j]]=[lanes[j],lanes[i]]; if(laneIdx===i) laneIdx=j; else if(laneIdx===j) laneIdx=i; saveLanes(); LS.set('laneIdx',laneIdx); renderLaneManage(); renderTabs(); });
     row.querySelector('[data-del]').onclick=()=>{ if(lanes.length===1){ toast('Keep at least one lane'); return; } lanes.splice(i,1); if(laneIdx>=lanes.length) laneIdx=lanes.length-1; saveLanes(); LS.set('laneIdx',laneIdx); renderLaneManage(); render(); };
     m.appendChild(row); });
@@ -789,9 +861,9 @@ function renderLaneManage(){
 function clock(t){ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function lineup(){ let t=Date.now(); return queue.map(q=>{ const at=t; t+= (q.duration||0)*1000; return at; }).concat([t]); }
 function fmtLen(s){ const h=Math.floor(s/3600), m=Math.round(s%3600/60); return h? h+' h '+m+' min' : m+' min'; }
-function updateQ(){ $('#qcount').textContent=queue.length; const tot=queue.reduce((a,q)=>a+(q.duration||0),0); const times=lineup(); const end=times[times.length-1];
-  $('#qtotal').innerHTML=queue.length? `<span>${fmtLen(tot)}</span><span>ends ${clock(end)}</span>` : '';
-  const e=$('#qend'); e.hidden=!queue.length; e.textContent=queue.length? 'until '+clock(end) : ''; }
+function updateQ(){ if(typeof markQueued==='function') markQueued(); $('#qcount').textContent=queue.length; const tot=queue.reduce((a,q)=>a+(q.duration||0),0); const times=lineup(); const end=times[times.length-1];
+  $('#qtotal').innerHTML=queue.length&&tot? `<span>${fmtLen(tot)}</span><span>ends ${clock(end)}</span>` : '';
+  const e=$('#qend'); e.hidden=!queue.length||!tot; e.textContent=queue.length? 'until '+clock(end) : ''; }
 function renderQ(){
   const list=$('#qlist'); list.innerHTML=''; updateQ();
   if(!queue.length){ list.innerHTML='<div class="qempty"><b>Nothing queued yet</b>Double-tap a video or hit + to add it here.</div>'; return; }
@@ -892,15 +964,17 @@ $('#btnAuth').onclick=()=>{ if(tokenValid()){ auth=null; saveAuth(); renderAuth(
 /* ===================== settings ===================== */
 function loadSettingsUI(){
   $('#apiKey').value=settings.apiKey; $('#clientId').value=settings.clientId; $('#region').value=settings.region;
-  $('#swShorts').setAttribute('aria-checked',settings.hideShorts); $('#swLive').setAttribute('aria-checked',settings.hideLive); $('#swSeen').setAttribute('aria-checked',settings.trackSeen); $('#selStart').value=String(settings.startPct);
+  $('#swShorts').setAttribute('aria-checked',settings.hideShorts); $('#swLive').setAttribute('aria-checked',settings.hideLive); $('#swSeen').setAttribute('aria-checked',settings.trackSeen); $('#swAdvance').setAttribute('aria-checked',settings.autoAdvance); $('#selPreview').value=settings.previewMode; pmHelp(); $('#selStart').value=String(settings.startPct);
   $('#originCode').textContent=location.origin; $('#redirectCode').textContent=REDIRECT; $('#seenCount').textContent=Object.keys(seen).length+' seen and '+Object.keys(hidden).length+' hidden'; renderAuth();
 }
-document.querySelectorAll('.switch').forEach(s=>s.onclick=()=>{ const v=s.getAttribute('aria-checked')!=='true'; s.setAttribute('aria-checked',v); if(s.id==='swShorts') settings.hideShorts=v; if(s.id==='swLive') settings.hideLive=v; if(s.id==='swSeen') settings.trackSeen=v; LS.set('settings',settings); render(); });
+document.querySelectorAll('.switch').forEach(s=>s.onclick=()=>{ const v=s.getAttribute('aria-checked')!=='true'; s.setAttribute('aria-checked',v); if(s.id==='swShorts') settings.hideShorts=v; if(s.id==='swLive') settings.hideLive=v; if(s.id==='swSeen') settings.trackSeen=v; if(s.id==='swAdvance'){ settings.autoAdvance=v; LS.set('settings',settings); return; } LS.set('settings',settings); render(); });
+function pmHelp(){ $('#pmHelp').textContent = settings.previewMode==='clean' ? 'Waits about 4 seconds so YouTube\'s icons are gone before the video shows.' : 'Starts right away. YouTube\'s pause icon may show for a moment.'; }
+$('#selPreview').onchange=e=>{ settings.previewMode=e.target.value; LS.set('settings',settings); pmHelp(); };
 $('#selStart').onchange=e=>{ settings.startPct=+e.target.value; LS.set('settings',settings); };
 $('#btnSaveSettings').onclick=()=>{
   const wasDemo=demoMode();
   settings.apiKey=$('#apiKey').value.trim(); settings.clientId=$('#clientId').value.trim(); settings.region=($('#region').value.trim()||'QA').toUpperCase(); LS.set('settings',settings);
-  if(wasDemo && !demoMode()){ lanes=defaultLanes(); laneIdx=1; saveLanes(); LS.set('laneIdx',laneIdx); for(const k in rt) delete rt[k]; toast('Connected to YouTube'); }
+  if(wasDemo && !demoMode()){ lanes=defaultLanes(); laneIdx=0; saveLanes(); LS.set('laneIdx',laneIdx); LS.set('laneLayout',2); discoverInterests().catch(()=>{}); for(const k in rt) delete rt[k]; toast('Connected to YouTube'); }
   else if(!wasDemo && demoMode()){ lanes=DEMO_LANES.map(l=>({id:uid(),type:'demo',label:l.label})); laneIdx=0; saveLanes(); LS.set('laneIdx',0); for(const k in rt) delete rt[k]; }
   else toast('Saved');
   closeSheets(); render();
@@ -938,6 +1012,7 @@ window.addEventListener('resize', ()=>place());
 document.addEventListener('visibilitychange', ()=>{ slots.forEach(sl=>{ try{ if(!sl.ok||!sl.vid) return; document.hidden? sl.player.pauseVideo() : sl.player.playVideo(); }catch(e){} }); });
 if(!LS.get('welcomed',false)){ $('#welcome').hidden=false; $('#btnStart').onclick=()=>{ $('#welcome').hidden=true; LS.set('welcomed',true); }; }
 updateQ(); render();
+setTimeout(()=>discoverInterests().catch(e=>console.warn('interests',e)), 1500);
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 </script>
 </body>
