@@ -67,7 +67,10 @@ input,textarea{font:inherit}
 .zone.preview{width:auto;margin-left:calc(-1 * max(16px,var(--sar)));margin-right:calc(-1 * max(16px,var(--sal)));border-radius:0;box-shadow:none}
 .zone.poster{border-radius:22px;outline:1px solid var(--line);outline-offset:-1px}
 .zone img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-.zone.preview img.bg{animation:drift 9s ease-out both;filter:brightness(.62) saturate(.85)}
+.zone.preview .flip{position:absolute;inset:0;animation:drift 9s ease-out both;background:var(--bg-3)}
+.zone.preview .flip img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;filter:brightness(.8);animation:flip 2.7s infinite}
+.zone.preview .flip img:nth-child(1){opacity:1;animation-delay:0s}.zone.preview .flip img:nth-child(2){animation-delay:.9s}.zone.preview .flip img:nth-child(3){animation-delay:1.8s}
+@keyframes flip{0%{opacity:0}6%{opacity:1}33%{opacity:1}40%{opacity:0}100%{opacity:0}}
 @keyframes drift{from{transform:scale(1.02)}to{transform:scale(1.12)}}
 
 .zone .prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(243,238,229,.12);z-index:3}
@@ -78,6 +81,9 @@ input,textarea{font:inherit}
 #players{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden}
 .slot{position:absolute;overflow:hidden;opacity:0;transition:opacity .45s;will-change:transform;background:#000}
 .slot.ready{opacity:1}
+.slot.ready .host{animation:settle .9s cubic-bezier(.2,.8,.2,1) both}
+@keyframes settle{from{transform:scale(1.12)}to{transform:none}}
+.slot{transition:opacity .2s!important}
 .slot.current{z-index:2}
 .slot .host{position:absolute;inset:0}
 .slot .host iframe{position:absolute;left:0;top:-200px;width:100%;height:calc(100% + 400px);border:0;display:block}
@@ -109,7 +115,13 @@ input,textarea{font:inherit}
 .chan .cn{min-width:0;flex:1}
 .chan .cn b{display:block;font-family:var(--body);font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chan .cn small{display:block;color:var(--fg-2);font-size:12px;font-variant-numeric:tabular-nums}
-.chan .age{flex:none;font-size:13px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.chan .cn small{display:flex;gap:10px}
+.chan .cn small span:empty{display:none}
+.taste{flex:none;display:flex;gap:8px}
+.taste button{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgba(243,238,229,.07);border:1px solid var(--line);color:var(--fg-2);transition:transform .15s,background .15s,color .15s}
+.taste button:active{transform:scale(.86)}
+.taste svg{width:19px;height:19px}
+.card.liked .taste [data-act=like]{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
 .stats{display:flex;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line)}
 .stat{min-width:0;display:flex;align-items:baseline;gap:5px}
 .stat b{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:.01em;font-variant-numeric:tabular-nums;line-height:1}
@@ -303,6 +315,9 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;back
       <div class="row"><div><b>Preview playback</b><small id="pmHelp">Starts right away. YouTube's pause icon may show for a moment.</small></div><select id="selPreview" style="padding:8px 10px;border-radius:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line)"><option value="instant">Instant</option><option value="clean">Clean</option></select></div>
       <div class="row"><div><b>Preview start</b><small>Skip the intro</small></div><select id="selStart" style="padding:8px 10px;border-radius:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line)"><option value="0">From start</option><option value="10" selected>10% in</option><option value="20">20% in</option></select></div>
 
+      <h4 class="sec">Your taste</h4>
+      <div class="row"><div><b>Send likes to YouTube too</b><small>Your likes and dislikes also count on your YouTube account, which shapes YouTube's own suggestions</small></div><button class="switch" role="switch" aria-checked="true" id="swRate"></button></div>
+      <div class="row"><div><b>What Lanes has learned</b><small id="tasteSummary"></small></div><button class="btn" id="btnResetTaste">Reset</button></div>
       <h4 class="sec">YouTube connection</h4>
       <div class="field"><label for="apiKey">API key</label>
         <input type="text" id="apiKey" placeholder="AIza…" autocapitalize="none" autocomplete="off">
@@ -353,7 +368,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;back
         <div><b>↑</b>next video<br><i>same lane</i></div>
         <div><b>← →</b>switch lane<br><i>new topic</i></div>
         <div><b>2×</b>double-tap<br><i>add to tonight</i></div>
-        <div><b>Hold</b>press on a video<br><i>never show again</i></div>
+        <div><b>Hold</b>press on a video<br><i>not for me</i></div>
       </div>
       <button class="btn primary block" id="btnStart">Start swiping</button>
     </div>
@@ -370,7 +385,7 @@ const LS = {
 };
 const DAY = 864e5;
 const SESSION_START = Date.now();
-const settings = Object.assign({ apiKey:'', clientId:'', hideShorts:true, hideLive:true, trackSeen:true, startPct:10, region:'QA', autoAdvance:false, previewMode:'instant' }, LS.get('settings', {}));
+const settings = Object.assign({ apiKey:'', clientId:'', hideShorts:true, hideLive:true, trackSeen:true, startPct:10, region:'QA', autoAdvance:false, previewMode:'instant', rateOnYT:true }, LS.get('settings', {}));
 let lanes = LS.get('lanes', null);
 let laneIdx = LS.get('laneIdx', 0);
 let queue = LS.get('queue', []);
@@ -419,7 +434,74 @@ function toast(msg, action, fn){
   t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'), action?4000:1800);
 }
 function visibleItems(l){ const r=R(l); return r.items; }
+/* Taste model, kept on this phone. Likes, dislikes, adds and quick skips adjust a score
+   for each channel and for the words in titles; Home and interest lanes are ranked by it. */
+let taste=LS.get('taste',{ ch:{}, w:{}, likes:0, dislikes:0 });
+let rated=LS.get('rated',{}); // videoId -> 1 | -1
+const STOPW=new Set('this that with from your what when where have will they them their about into over just more most official video videos full trailer music lyrics live episode part feat featuring vs versus highlights shorts best new top review 2023 2024 2025 2026'.split(' '));
+function words(t){ return [...new Set((t||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').split(' ').filter(w=>w.length>=4&&!STOPW.has(w)&&!/^\d+$/.test(w)))].slice(0,10); }
+function learn(v, amt){
+  if(!v||!amt) return; const id=v.channelId||('n:'+v.channel);
+  const c=taste.ch[id]||(taste.ch[id]={ s:0, n:v.channel }); c.s=Math.max(-10,Math.min(10,c.s+amt)); c.n=v.channel;
+  words(v.title).forEach(w=>{ taste.w[w]=Math.max(-4,Math.min(4,(taste.w[w]||0)+amt*0.35)); });
+  const ws=Object.entries(taste.w); if(ws.length>400){ ws.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])); taste.w=Object.fromEntries(ws.slice(0,300)); }
+  LS.set('taste',taste);
+}
+function tasteScore(v){ const c=taste.ch[v.channelId||('n:'+v.channel)]; let sc=c?c.s:0; words(v.title).forEach(w=>sc+=(taste.w[w]||0)); return sc; }
+function blockedChannel(v){ const c=taste.ch[v.channelId||('n:'+v.channel)]; return !!c && c.s<=-6; }
+const RANKED=new Set(['home','interest','search','trending']);
+function rankBatch(vids, l){
+  if(!RANKED.has(l.type)) return vids;                       // Subscriptions, Liked, channels keep YouTube's order
+  return vids.map((v,i)=>[v, tasteScore(v)*0.8 - i*0.12]).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+}
+// After a like or dislike, reorder what's coming (keeps the current and the pre-loaded next video in place)
+function rerankAhead(){
+  const l=current(); if(!l||!RANKED.has(l.type)) return; const r=R(l);
+  const anchor=(cards.v1&&cards.v1._video)||(cards.v0&&cards.v0._video); if(!anchor) return;
+  const at=r.items.findIndex(v=>v.id===anchor.id); if(at<0) return;
+  const head=r.items.slice(0,at+1), tail=r.items.slice(at+1);
+  r.items=head.concat(tail.map((v,i)=>[v, tasteScore(v)*0.8 - i*0.05]).sort((a,b)=>b[1]-a[1]).map(x=>x[0]));
+}
+// "More like this": pull the channel's other recent uploads in right after the next video
+async function moreFrom(v){
+  const l=current(); if(!l||!RANKED.has(l.type)||demoMode()||!v.channelId) return;
+  try{
+    const c=await yt('channels',{ part:'contentDetails', id:v.channelId }); const up=((c.items||[])[0]||{}).contentDetails; if(!up) return;
+    const j=await yt('playlistItems',{ part:'contentDetails', playlistId:up.relatedPlaylists.uploads, maxResults:12 });
+    const r=R(l); const have=new Set(r.items.map(x=>x.id));
+    const fresh=(await hydrate((j.items||[]).map(x=>x.contentDetails.videoId).filter(id=>!have.has(id)))).filter(allowed).slice(0,4);
+    if(!fresh.length) return;
+    const anchor=(cards.v1&&cards.v1._video)||v; const at=r.items.findIndex(x=>x.id===anchor.id);
+    fresh.forEach((f,k)=>r.items.splice(at+1+k*2, 0, f));   // spread them out, every other slot
+  }catch(e){ console.warn('more from channel', e); }
+}
+function rateOnYouTube(v, rating){
+  if(!settings.rateOnYT||demoMode()||!tokenValid()) return;
+  yt('videos/rate',{ id:v.id, rating },{ auth:true, method:'POST' }).catch(e=>console.warn('rate',e));
+}
+function likeCurrent(){
+  const v=curVideo(); if(!v) return;
+  if(rated[v.id]===1){ delete rated[v.id]; LS.set('rated',rated); learn(v,-3); taste.likes=Math.max(0,(taste.likes||0)-1); LS.set('taste',taste); rateOnYouTube(v,'none'); markRated(); toast('Like removed'); return; }
+  rated[v.id]=1; LS.set('rated',rated); learn(v,3); taste.likes=(taste.likes||0)+1; LS.set('taste',taste); vibrate(10);
+  rateOnYouTube(v,'like'); markRated(); rerankAhead(); moreFrom(v);
+  toast('More like this coming up');
+}
+function dislikeCurrent(){
+  const v=curVideo(); if(!v) return;
+  rated[v.id]=-1; LS.set('rated',rated); learn(v,-3); taste.dislikes=(taste.dislikes||0)+1; LS.set('taste',taste);
+  hidden[v.id]=Date.now(); LS.set('hidden',hidden); vibrate([10,30,10]); rateOnYouTube(v,'dislike');
+  const st=cards.v0.querySelector('.stamp'); st.classList.remove('go'); st.classList.add('hide'); st.querySelector('.pop').innerHTML=ICON.down; void st.offsetWidth; st.classList.add('go');
+  rerankAhead();
+  setTimeout(()=>{ if(cards.v1) animateTo(0,-H(),render); else render(); }, 350);
+  const blocked=blockedChannel(v);
+  toast(blocked? 'You won\'t see '+v.channel+' here' : 'Less like this', 'Undo', ()=>{ delete rated[v.id]; delete hidden[v.id]; LS.set('rated',rated); LS.set('hidden',hidden); learn(v,3); taste.dislikes=Math.max(0,taste.dislikes-1); LS.set('taste',taste); rateOnYouTube(v,'none'); render(); });
+}
+function markRated(){ for(const k in cards){ const el=cards[k], v=el._video; if(!v) continue; el.classList.toggle('liked', rated[v.id]===1); } }
+// Dwell: a quick flick past is a small "not for me"; staying a while is a small "yes"
+let shownAt=0, shownId=null;
+function noteDwell(v){ if(!v||v.id!==shownId) return; const secs=(Date.now()-shownAt)/1000; if(secs<1.2) learn(v,-0.25); else if(secs>12) learn(v,0.4); }
 function allowed(v){
+  if(blockedChannel(v)) return false;
   if(hidden[v.id]) return false;
   if(settings.trackSeen && seen[v.id] && seen[v.id] < SESSION_START && !demoMode()) return false; // only videos from earlier sessions; tonight's list stays stable
   if(settings.hideShorts && v.duration>0 && v.duration<=60) return false;
@@ -503,10 +585,9 @@ async function homeMix(){
   const topics=lanes.filter(x=>x.type==='interest'||x.type==='search').slice(0,3);
   const jobs=[ tokenValid()? subsVideos() : Promise.resolve([]) ];
   topics.forEach(t=>jobs.push(searchPage(t.q, t.order, t.type==='interest').then(r=>r.vids)));
-  jobs.push(trendingPage(null).then(r=>r.vids));
   const res=await Promise.allSettled(jobs);
   const lists=res.map(r=>r.status==='fulfilled'?r.value:[]);
-  if(lists.every(l=>!l.length)){ const bad=res.find(r=>r.status==='rejected'); if(bad) throw bad.reason; }
+  if(lists.every(l=>!l.length)){ const bad=res.find(r=>r.status==='rejected'); if(bad) throw bad.reason; if(!tokenValid()) throw new Error('Sign in to load this lane: Home is built from your subscriptions and interests.'); }
   const out=[], seenIds=new Set(), ptr=lists.map(()=>0);
   const take=(k)=>{ const L=lists[k]; while(ptr[k]<L.length){ const v=L[ptr[k]++]; if(!seenIds.has(v.id)){ seenIds.add(v.id); out.push(v); return true; } } return false; };
   for(let round=0; round<60; round++){ let any=false; any=take(0)||any; any=take(0)||any; for(let k=1;k<lists.length;k++) any=take(k)||any; if(!any) break; }
@@ -558,7 +639,7 @@ async function fetchLane(l){
     else if(l.type==='subs'){ vids=await subsVideos(); r.done=true; }
     if(l.type!=='home'&&l.type!=='subs'){ r.pageToken=next; if(!next) r.done=true; }
     const have=new Set(r.items.map(v=>v.id));
-    vids.forEach(v=>{ if(!have.has(v.id)) { r.items.push(v); have.add(v.id);} });
+    rankBatch(vids,l).forEach(v=>{ if(!have.has(v.id)) { r.items.push(v); have.add(v.id);} });
     loadChannels(vids).then(()=>{ if(lanes[laneIdx]===l) refreshChannelInfo(); });
   }catch(e){ r.error=e.message||'error'; if(r.error==='AUTH'){ r.error='Sign in to load this lane'; } console.warn('lane',l.label,e); }
   r.loading=false;
@@ -577,6 +658,8 @@ function recompute(l){ // keep cursorV (index into filtered list) consistent
   const r=R(l); const list=r.items.filter(allowed); if(r.cursorV==null) r.cursorV=0; if(r.cursorV>list.length-1) r.cursorV=Math.max(0,list.length-1); if(!r.done && !r.error && !r.loading && list.length-r.cursorV<5) fetchLane(l); return list; }
 
 const ICON={
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 10l4-7a2.5 2.5 0 0 1 2.5 2.5V9h5a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.3 20H7"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1zM17 14l-4 7a2.5 2.5 0 0 1-2.5-2.5V15h-5a2 2 0 0 1-2-2.3l1.2-7A2 2 0 0 1 6.7 4H17"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   hide:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10 10 0 0 1 2 12s2.5-5 7-6.6M9.9 4.2A10 10 0 0 1 22 12a14 14 0 0 1-2.1 3M1 1l22 22"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/></svg>',
@@ -601,13 +684,13 @@ function cardEl(v, l, state){ // state: 'skeleton' | 'empty' | 'error'
   const ch=chan[v.channelId]||{};
   const img=`<img class="bg" src="${thumb(v.id,true)}" alt="" onload="if(this.naturalWidth<=120&&!this.dataset.f){this.dataset.f=1;this.src='${thumb(v.id,false)}'}" onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${thumb(v.id,false)}'}">`;
   el.innerHTML=`<div class="ambient" style="background-image:url('${thumb(v.id,false)}')"></div>
-    <div class="zone preview"><img class="bg frame" src="https://i.ytimg.com/vi/${v.id}/hq2.jpg" alt="" onerror="this.onerror=null;this.src='${thumb(v.id,false)}'"><div class="prog"><i></i></div><div class="shield"></div>
+    <div class="zone preview"><div class="flip"><img src="https://i.ytimg.com/vi/${v.id}/hq1.jpg" alt=""><img src="https://i.ytimg.com/vi/${v.id}/hq2.jpg" alt=""><img src="https://i.ytimg.com/vi/${v.id}/hq3.jpg" alt=""></div><div class="prog"><i></i></div><div class="shield"></div>
       <span class="tag tl"><span class="dot"></span><span class="tagtxt">Preview</span></span><span class="tag tr">${fmtDur(v.duration)}</span>
 </div>
     <div class="zone poster">${img}<div class="shade"></div><h2>${esc(v.title)}</h2>
       <div class="rail"><button class="primary" data-act="queue"><span class="ic">${ICON.plus}</span>Queue</button><button data-act="hide"><span class="ic">${ICON.hide}</span>Hide</button><button data-act="open"><span class="ic">${ICON.open}</span>Open</button></div></div>
     <div class="details">
-      <div class="chan"><span class="ava">${ch.avatar?`<img src="${ch.avatar}" alt="">`:esc(initial)}</span><div class="cn"><b>${esc(v.channel)}</b><small${ch.subs?'':' hidden'}>${ch.subs?fmtViews(ch.subs)+' subscribers':''}</small></div><span class="age">${fmtAge(v.published)||'—'}</span></div>
+      <div class="chan"><span class="ava">${ch.avatar?`<img src="${ch.avatar}" alt="">`:esc(initial)}</span><div class="cn"><b>${esc(v.channel)}</b><small><span class="subs">${ch.subs?fmtViews(ch.subs)+' subscribers':''}</span><span class="age">${fmtAge(v.published)}</span></small></div><div class="taste"><button data-act="like" aria-label="I like this">${ICON.up}</button><button data-act="dislike" aria-label="Not for me">${ICON.down}</button></div></div>
       <div class="stats">
         <div class="stat"><b>${v.views?fmtViews(v.views):'—'}</b><small>views</small></div>
         <div class="stat"${v.likes?'':' hidden'}><b>${fmtViews(v.likes)}</b><small>likes</small></div>
@@ -660,10 +743,11 @@ function render(){
   tf={x:0,y:0}; place();
   // prefetch next thumbnails
   if(l){ const list=R(l).items.filter(allowed); for(let i=1;i<=3;i++){ const v=list[(R(l).cursorV||0)+i]; if(v){ const im=new Image(); im.src=thumb(v.id,true);} } }
-  renderTabs(); markQueued(); assignPlayers(); scheduleComments();
+  renderTabs(); markQueued(); markRated(); assignPlayers(); scheduleComments();
+  const sv=cards.v0&&cards.v0._video; if(sv&&sv.id!==shownId){ shownId=sv.id; shownAt=Date.now(); }
   $('#hint').style.opacity = LS.get('swipes',0)>8 ? 0 : 1;
 }
-function refreshChannelInfo(){ for(const k in cards){ const el=cards[k], v=el._video; if(!v) continue; const ch=chan[v.channelId]; if(!ch) continue; const a=el.querySelector('.ava'); if(a&&ch.avatar&&!a.querySelector('img')) a.innerHTML=`<img src="${ch.avatar}" alt="">`; const sm=el.querySelector('.cn small'); if(sm&&ch.subs){ sm.textContent=fmtViews(ch.subs)+' subscribers'; sm.hidden=false; } } }
+function refreshChannelInfo(){ for(const k in cards){ const el=cards[k], v=el._video; if(!v) continue; const ch=chan[v.channelId]; if(!ch) continue; const a=el.querySelector('.ava'); if(a&&ch.avatar&&!a.querySelector('img')) a.innerHTML=`<img src="${ch.avatar}" alt="">`; const sm=el.querySelector('.cn .subs'); if(sm&&ch.subs){ sm.textContent=fmtViews(ch.subs)+' subscribers'; } } }
 let cmtTimer=null;
 function scheduleComments(){ clearTimeout(cmtTimer); const el=cards.v0; if(!el||!el._video) return; cmtTimer=setTimeout(()=>loadComments(el._video, el), 500); }
 function renderIfSkeleton(l){ if(lanes[laneIdx]===l && cards.v0 && cards.v0.classList.contains('empty')) render(); }
@@ -675,7 +759,7 @@ function renderIfSkeleton(l){ if(lanes[laneIdx]===l && cards.v0 && cards.v0.clas
    Swapping just exchanges roles; iframes are never rebuilt or moved. */
 let ytReady=false, muted=true, slots=[], curSlot=null, nxtSlot=null;
 // Instant: show the video as soon as frames move. Clean: wait until YouTube's own icons fade.
-const readyAfter=()=> settings.previewMode==='clean' ? 3.6 : 0.25;
+const readyAfter=()=> settings.previewMode==='clean' ? 3.6 : 0;
 window.onYouTubeIframeAPIReady=()=>{ ytReady=true; assignPlayers(); };
 (function loadYT(){ const s=document.createElement('script'); s.src='https://www.youtube.com/iframe_api'; document.head.appendChild(s); })();
 const layer=document.createElement('div'); layer.id='players'; $('#stage').insertBefore(layer, $('#top'));
@@ -714,6 +798,7 @@ function guard(slot){ clearTimeout(slot._guard); const want=slot.vid;
 function slotPause(slot){ slot.wantPlay=false; clearInterval(slot.poll); slot.poll=null; if(slot.ok){ try{ slot.player.pauseVideo(); }catch(_){} } }
 function watchReady(slot){
   if(slot.ready||slot.poll) return; const want=slot.vid; let t0=null; const need=readyAfter();
+  if(!need){ slot.ready=true; slot.el.classList.add('ready'); if(slot===curSlot) flashHud(slot); return; }
   slot.poll=setInterval(()=>{
     if(slot.vid!==want){ clearInterval(slot.poll); slot.poll=null; return; }
     let ct=0, id=''; try{ ct=slot.player.getCurrentTime(); id=(slot.player.getVideoData()||{}).video_id; }catch(_){ return; }
@@ -762,7 +847,7 @@ deck.addEventListener('pointerdown', e=>{
   if(e.target.closest('[data-act],.rail')) return;
   drag={ x0:e.clientX, y0:e.clientY, t0:performance.now(), axis:null, id:e.pointerId, moved:false };
   deck.setPointerCapture(e.pointerId);
-  clearTimeout(pressTimer); pressTimer=setTimeout(()=>{ if(drag && !drag.moved){ drag.consumed=true; hideCurrent(); } }, 550);
+  clearTimeout(pressTimer); pressTimer=setTimeout(()=>{ if(drag && !drag.moved){ drag.consumed=true; dislikeCurrent(); } }, 550);
 });
 deck.addEventListener('pointermove', e=>{
   if(!drag || e.pointerId!==drag.id) return;
@@ -790,7 +875,7 @@ function endDrag(e){
   const el=$('#deck');
   if(d.axis==='v'){
     const v=dy/dt; let dir=0; if((dy<-H()*0.18 || v<-0.45) && cards.v1) dir=1; else if((dy>H()*0.18 || v>0.45) && cards['v-1']) dir=-1;
-    animateTo(0, -dir*H(), ()=>{ if(dir){ const l=current(); const r=R(l); const list=r.items.filter(allowed); if(dir===1 && settings.trackSeen){ const cur=list[r.cursorV]; if(cur){ seen[cur.id]=Date.now(); LS.set('seen',seen);} } r.cursorV+=dir; countSwipe(); } render(); });
+    animateTo(0, -dir*H(), ()=>{ if(dir){ const l=current(); const r=R(l); const list=r.items.filter(allowed); if(dir===1 && settings.trackSeen){ const cur=list[r.cursorV]; if(cur){ seen[cur.id]=Date.now(); LS.set('seen',seen);} } if(dir===1) noteDwell(list[r.cursorV]); r.cursorV+=dir; countSwipe(); } render(); });
   } else {
     const v=dx/dt; let dir=0; if((dx<-W()*0.18 || v<-0.45) && cards.h1) dir=1; else if((dx>W()*0.18 || v>0.45) && cards['h-1']) dir=-1;
     animateTo(-dir*W(), 0, ()=>{ if(dir){ laneIdx+=dir; LS.set('laneIdx',laneIdx); countSwipe(); vibrate(8);} render(); });
@@ -817,7 +902,7 @@ function queueCurrent(pop){
   const v=curVideo(); if(!v) return;
   if(inQueue(v.id)){ // second double-tap takes it back out
     queue=queue.filter(q=>q.id!==v.id); LS.set('queue',queue); updateQ(); markQueued(); vibrate(8); toast('Removed from tonight'); return; }
-  queue.push({ id:v.id, title:v.title, channel:v.channel, duration:v.duration }); LS.set('queue',queue); updateQ(); markQueued(); vibrate(12);
+  queue.push({ id:v.id, title:v.title, channel:v.channel, duration:v.duration }); LS.set('queue',queue); updateQ(); markQueued(); vibrate(12); learn(v,1.5);
   if(pop){ const st=cards.v0.querySelector('.stamp'); st.classList.remove('go','hide'); st.querySelector('.pop').innerHTML=ICON.plus; void st.offsetWidth; st.classList.add('go'); }
   const n=$('#qcount'); n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump');
   if(settings.autoAdvance && cards.v1){
@@ -830,7 +915,7 @@ function hideCurrent(){
   setTimeout(()=>{ if(cards.v1) animateTo(0,-H(),render); else render(); }, 350);
   toast('Hidden', 'Undo', ()=>{ delete hidden[v.id]; LS.set('hidden',hidden); render(); });
 }
-deck.addEventListener('click', e=>{ const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act; if(a==='queue') return queueCurrent(true); if(a==='hide') return hideCurrent(); if(a==='open'){ const v=curVideo(); if(v) window.open('https://www.youtube.com/watch?v='+v.id,'_blank'); return; } if(a==='retry'){ const r=R(current()); r.error=null; r.done=false; fetchLane(current()); render(); } if(a==='settings') openSheet('ssheet'); if(a==='signin') signIn(); if(a==='addlane') openSheet('lsheet'); });
+deck.addEventListener('click', e=>{ const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act; if(a==='queue') return queueCurrent(true); if(a==='hide') return hideCurrent(); if(a==='like') return likeCurrent(); if(a==='dislike') return dislikeCurrent(); if(a==='open'){ const v=curVideo(); if(v) window.open('https://www.youtube.com/watch?v='+v.id,'_blank'); return; } if(a==='retry'){ const r=R(current()); r.error=null; r.done=false; fetchLane(current()); render(); } if(a==='settings') openSheet('ssheet'); if(a==='signin') signIn(); if(a==='addlane') openSheet('lsheet'); });
 
 /* ===================== tabs ===================== */
 function renderTabs(){
@@ -851,7 +936,7 @@ $('#laneQ').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefaul
 function renderLaneManage(){
   const m=$('#laneManage'); m.innerHTML='';
   lanes.forEach((l,i)=>{ const row=document.createElement('div'); row.className='row';
-    row.innerHTML=`<div><b>${esc(l.label)}</b><small>${l.type==='home'?'Mix of subscriptions, interests and trending':l.type==='interest'?'From the channels you subscribe to':l.type==='search'?'Topic: '+esc({relevance:'most relevant',date:'newest',viewCount:'most viewed'}[l.order||'relevance']):l.type==='channel'?'Channel':l.type==='demo'?'Demo':'Built in'}</small></div><div style="display:flex;gap:6px"><button class="btn" data-mv="-1" ${i===0?'disabled':''}>↑</button><button class="btn" data-mv="1" ${i===lanes.length-1?'disabled':''}>↓</button><button class="btn" data-del="1">✕</button></div>`;
+    row.innerHTML=`<div><b>${esc(l.label)}</b><small>${l.type==='home'?'Your subscriptions and interests, ranked by what you like':l.type==='interest'?'From the channels you subscribe to':l.type==='search'?'Topic: '+esc({relevance:'most relevant',date:'newest',viewCount:'most viewed'}[l.order||'relevance']):l.type==='channel'?'Channel':l.type==='demo'?'Demo':'Built in'}</small></div><div style="display:flex;gap:6px"><button class="btn" data-mv="-1" ${i===0?'disabled':''}>↑</button><button class="btn" data-mv="1" ${i===lanes.length-1?'disabled':''}>↓</button><button class="btn" data-del="1">✕</button></div>`;
     row.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{ const j=i+(+b.dataset.mv); [lanes[i],lanes[j]]=[lanes[j],lanes[i]]; if(laneIdx===i) laneIdx=j; else if(laneIdx===j) laneIdx=i; saveLanes(); LS.set('laneIdx',laneIdx); renderLaneManage(); renderTabs(); });
     row.querySelector('[data-del]').onclick=()=>{ if(lanes.length===1){ toast('Keep at least one lane'); return; } lanes.splice(i,1); if(laneIdx>=lanes.length) laneIdx=lanes.length-1; saveLanes(); LS.set('laneIdx',laneIdx); renderLaneManage(); render(); };
     m.appendChild(row); });
@@ -964,10 +1049,16 @@ $('#btnAuth').onclick=()=>{ if(tokenValid()){ auth=null; saveAuth(); renderAuth(
 /* ===================== settings ===================== */
 function loadSettingsUI(){
   $('#apiKey').value=settings.apiKey; $('#clientId').value=settings.clientId; $('#region').value=settings.region;
-  $('#swShorts').setAttribute('aria-checked',settings.hideShorts); $('#swLive').setAttribute('aria-checked',settings.hideLive); $('#swSeen').setAttribute('aria-checked',settings.trackSeen); $('#swAdvance').setAttribute('aria-checked',settings.autoAdvance); $('#selPreview').value=settings.previewMode; pmHelp(); $('#selStart').value=String(settings.startPct);
+  $('#swShorts').setAttribute('aria-checked',settings.hideShorts); $('#swLive').setAttribute('aria-checked',settings.hideLive); $('#swSeen').setAttribute('aria-checked',settings.trackSeen); $('#swAdvance').setAttribute('aria-checked',settings.autoAdvance); $('#swRate').setAttribute('aria-checked',settings.rateOnYT); tasteSummary(); $('#selPreview').value=settings.previewMode; pmHelp(); $('#selStart').value=String(settings.startPct);
   $('#originCode').textContent=location.origin; $('#redirectCode').textContent=REDIRECT; $('#seenCount').textContent=Object.keys(seen).length+' seen and '+Object.keys(hidden).length+' hidden'; renderAuth();
 }
-document.querySelectorAll('.switch').forEach(s=>s.onclick=()=>{ const v=s.getAttribute('aria-checked')!=='true'; s.setAttribute('aria-checked',v); if(s.id==='swShorts') settings.hideShorts=v; if(s.id==='swLive') settings.hideLive=v; if(s.id==='swSeen') settings.trackSeen=v; if(s.id==='swAdvance'){ settings.autoAdvance=v; LS.set('settings',settings); return; } LS.set('settings',settings); render(); });
+document.querySelectorAll('.switch').forEach(s=>s.onclick=()=>{ const v=s.getAttribute('aria-checked')!=='true'; s.setAttribute('aria-checked',v); if(s.id==='swShorts') settings.hideShorts=v; if(s.id==='swLive') settings.hideLive=v; if(s.id==='swSeen') settings.trackSeen=v; if(s.id==='swAdvance'){ settings.autoAdvance=v; LS.set('settings',settings); return; } if(s.id==='swRate'){ settings.rateOnYT=v; LS.set('settings',settings); return; } LS.set('settings',settings); render(); });
+function tasteSummary(){
+  const top=Object.values(taste.ch).filter(c=>c.s>=3).sort((a,b)=>b.s-a.s).slice(0,3).map(c=>c.n);
+  const n=(taste.likes||0)+(taste.dislikes||0);
+  $('#tasteSummary').textContent = n||top.length ? `${taste.likes||0} likes and ${taste.dislikes||0} dislikes so far.`+(top.length?` You like ${top.join(', ')}.`:'') : 'Nothing yet. Like or dislike videos and Home will adjust.';
+}
+$('#btnResetTaste').onclick=()=>{ taste={ ch:{}, w:{}, likes:0, dislikes:0 }; rated={}; LS.set('taste',taste); LS.set('rated',rated); tasteSummary(); render(); toast('Taste reset'); };
 function pmHelp(){ $('#pmHelp').textContent = settings.previewMode==='clean' ? 'Waits about 4 seconds so YouTube\'s icons are gone before the video shows.' : 'Starts right away. YouTube\'s pause icon may show for a moment.'; }
 $('#selPreview').onchange=e=>{ settings.previewMode=e.target.value; LS.set('settings',settings); pmHelp(); };
 $('#selStart').onchange=e=>{ settings.startPct=+e.target.value; LS.set('settings',settings); };
