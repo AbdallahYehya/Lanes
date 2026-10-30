@@ -1,6 +1,6 @@
 // Minimal service worker: makes the app installable and keeps the shell cached.
 // Network first for the shell so updates land immediately; cache as a fallback.
-const CACHE = 'lanes-v3';
+const CACHE = 'lanes-v4';
 const SHELL = ['./', './index.html', './demo-data.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
