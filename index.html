@@ -211,6 +211,10 @@ input,textarea{font:inherit}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--bg-3);color:var(--fg-2)}
 .pill.ok{background:rgba(110,231,196,.14);color:var(--good)}
 .pill.warn{background:rgba(255,122,144,.14);color:var(--bad)}
+.checkout{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.checkout .ck{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:var(--bg);font-size:14px;line-height:1.4}
+.checkout .ck b{flex:none;width:20px;text-align:center}
+.checkout .ck.ok b{color:var(--good)}.checkout .ck.bad b{color:var(--bad)}.checkout .ck.na b{color:var(--fg-3)}
 h4.sec{font-family:var(--display);font-weight:800;font-size:22px;color:var(--fg);margin:26px 0 6px}
 .steps{margin:0;padding-left:20px;color:var(--fg-2);font-size:14px}
 .steps li{margin:6px 0}
@@ -309,6 +313,8 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;back
       <div class="field"><label for="region">Trending region</label>
         <input type="text" id="region" placeholder="QA" maxlength="2" autocapitalize="characters"></div>
       <button class="btn primary block" id="btnSaveSettings">Save</button>
+      <button class="btn block" id="btnCheck" style="margin-top:8px">Check connection</button>
+      <div id="checkOut" class="checkout" hidden></div>
 
       <h4 class="sec">Setup in 6 steps</h4>
       <ol class="steps">
@@ -365,7 +371,7 @@ let queue = LS.get('queue', []);
 let hidden = LS.get('hidden', {});     // id -> ts (forever)
 let seen = LS.get('seen', {});         // id -> ts (2 weeks)
 let playlistId = LS.get('playlistId', '');
-let auth = (()=>{ try{ return JSON.parse(sessionStorage.getItem('lanes:auth')||'null'); }catch(e){ return null; } })();
+let auth = (()=>{ try{ const a=JSON.parse(localStorage.getItem('lanes:auth')||'null'); return a&&a.exp>Date.now()? a : null; }catch(e){ return null; } })();
 
 const demoMode = () => !settings.apiKey;
 if(!lanes){
@@ -425,11 +431,22 @@ async function yt(path, params, opts={}){
   const res = await fetch(url, { method:opts.method||'GET', headers:{...headers, ...(opts.body?{'Content-Type':'application/json'}:{})}, body: opts.body?JSON.stringify(opts.body):undefined });
   if(res.status===204) return {};
   const j = await res.json();
-  if(!res.ok){ const m = j?.error?.errors?.[0]?.reason || j?.error?.message || res.status; if(res.status===401){ auth=null; saveAuth(); throw new Error('AUTH'); } throw new Error(m); }
+  if(!res.ok){ if(res.status===401){ auth=null; saveAuth(); throw new Error('AUTH'); } throw new Error(explainApiError(res.status, j)); }
   return j;
 }
+function explainApiError(status, j){
+  const e=(j&&j.error)||{}; const reason=((e.errors||[])[0]||{}).reason||''; const msg=e.message||''; const det=JSON.stringify(e.details||[]);
+  if(/API_KEY_INVALID|keyInvalid/.test(reason+det) || /API key not valid/i.test(msg)) return 'Google says the API key is not valid. Copy it again from Google Cloud → Credentials and paste it in Settings.';
+  if(/accessNotConfigured|SERVICE_DISABLED/.test(reason+det) || /has not been used|is disabled/i.test(msg)) return 'YouTube Data API v3 is not turned on for this Google Cloud project. Open APIs & Services → Library, search YouTube Data API v3, and tap Enable. It can take a few minutes to start working.';
+  if(/API_KEY_HTTP_REFERRER_BLOCKED|referer/i.test(reason+det+msg)) return 'The API key is restricted to other websites. In Google Cloud → Credentials → your key → Website restrictions, add '+location.origin+'/*';
+  if(/API_KEY_SERVICE_BLOCKED|API_KEY_.*BLOCKED/.test(det)) return 'The API key is not allowed to use YouTube. In Google Cloud → Credentials → your key → API restrictions, allow YouTube Data API v3.';
+  if(/quotaExceeded|dailyLimitExceeded|rateLimitExceeded/.test(reason)) return "Today's YouTube allowance for this key is used up. It resets at 11:00 Qatar time.";
+  if(/insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/.test(reason+det)) return 'The sign-in is missing YouTube permission. Sign out in Settings and sign in again, ticking the YouTube box.';
+  if(/youtubeSignupRequired/.test(reason)) return 'This Google account has no YouTube channel yet. Open YouTube once with this account and create the channel, then try again.';
+  return 'YouTube error '+status+(msg?': '+msg:'');
+}
 function tokenValid(){ return auth && auth.token && Date.now() < auth.exp - 30000; }
-function saveAuth(){ try{ sessionStorage.setItem('lanes:auth', JSON.stringify(auth)); }catch(e){} }
+function saveAuth(){ try{ auth? localStorage.setItem('lanes:auth', JSON.stringify(auth)) : localStorage.removeItem('lanes:auth'); }catch(e){} }
 function mapVideo(v){ // videos.list item
   const sn=v.snippet||{}, cd=v.contentDetails||{}, st=v.statistics||{};
   return { id:v.id, title:sn.title||'', channel:sn.channelTitle||'', channelId:sn.channelId||'', duration:isoDur(cd.duration), views:+st.viewCount||0, likes:+st.likeCount||0, comments:+st.commentCount||0, published:sn.publishedAt||'', live: sn.liveBroadcastContent && sn.liveBroadcastContent!=='none' };
@@ -501,7 +518,7 @@ function itemAt(l, off){ // visible item at cursor+off
   if(!l) return null; const r=R(l); const list=r.items.filter(allowed); const i=r.cursorV+off; return list[i]||null;
 }
 function recompute(l){ // keep cursorV (index into filtered list) consistent
-  const r=R(l); const list=r.items.filter(allowed); if(r.cursorV==null) r.cursorV=0; if(r.cursorV>list.length-1) r.cursorV=Math.max(0,list.length-1); if(!r.done && list.length-r.cursorV<5) fetchLane(l); return list; }
+  const r=R(l); const list=r.items.filter(allowed); if(r.cursorV==null) r.cursorV=0; if(r.cursorV>list.length-1) r.cursorV=Math.max(0,list.length-1); if(!r.done && !r.error && !r.loading && list.length-r.cursorV<5) fetchLane(l); return list; }
 
 const ICON={
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -518,7 +535,7 @@ function cardEl(v, l, state){ // state: 'skeleton' | 'empty' | 'error'
     const r=l?R(l):null;
     if(state==='skeleton'){ el.classList.add('skeleton'); el.innerHTML='<div class="zone"></div><div class="zone"></div><div class="details"><div class="line w"></div><div class="line"></div></div>'; return el; }
     el.classList.add('empty');
-    if(r&&r.error){ el.innerHTML=`<h3>Couldn't load this lane</h3><p>${esc(r.error)}</p><button class="btn" data-act="retry">Try again</button>${/sign in/i.test(r.error)?'<button class="btn primary" data-act="settings" style="margin-left:8px">Settings</button>':''}`; }
+    if(r&&r.error){ el.innerHTML=`<h3>Couldn't load this lane</h3><p>${esc(r.error)}</p><button class="btn" data-act="retry">Try again</button>${/sign in/i.test(r.error)?'<button class="btn primary" data-act="signin" style="margin-left:8px">Sign in with Google</button>':'<button class="btn primary" data-act="settings" style="margin-left:8px">Settings</button>'}`; }
     else if(demoMode() && lanes.length && l && l.type!=='demo'){ el.innerHTML=`<h3>Add your API key</h3><p>Real YouTube lanes need the key from Google Cloud. Until then, enjoy the demo lanes.</p><button class="btn primary" data-act="settings">Open settings</button>`; }
     else { el.innerHTML=`<h3>You've seen it all</h3><p>Nothing left in this lane right now. Swipe sideways for another lane, or add a new topic.</p><button class="btn primary" data-act="addlane">Add a lane</button>`; }
     return el;
@@ -741,7 +758,7 @@ function hideCurrent(){
   setTimeout(()=>{ if(cards.v1) animateTo(0,-H(),render); else render(); }, 350);
   toast('Hidden', 'Undo', ()=>{ delete hidden[v.id]; LS.set('hidden',hidden); render(); });
 }
-deck.addEventListener('click', e=>{ const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act; if(a==='queue') return queueCurrent(true); if(a==='hide') return hideCurrent(); if(a==='open'){ const v=curVideo(); if(v) window.open('https://www.youtube.com/watch?v='+v.id,'_blank'); return; } if(a==='retry'){ const r=R(current()); r.error=null; r.done=false; fetchLane(current()); render(); } if(a==='settings') openSheet('ssheet'); if(a==='addlane') openSheet('lsheet'); });
+deck.addEventListener('click', e=>{ const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act; if(a==='queue') return queueCurrent(true); if(a==='hide') return hideCurrent(); if(a==='open'){ const v=curVideo(); if(v) window.open('https://www.youtube.com/watch?v='+v.id,'_blank'); return; } if(a==='retry'){ const r=R(current()); r.error=null; r.done=false; fetchLane(current()); render(); } if(a==='settings') openSheet('ssheet'); if(a==='signin') signIn(); if(a==='addlane') openSheet('lsheet'); });
 
 /* ===================== tabs ===================== */
 function renderTabs(){
@@ -822,18 +839,28 @@ async function syncPlaylist(){
 }
 $('#btnTV').onclick=async ()=>{
   if(!queue.length){ toast('Queue something first'); return; }
-  if(demoMode()||!settings.clientId){ showTV(null,'Set up your API key and OAuth client in Settings, then sign in, to send the queue to YouTube.'); return; }
+  if(demoMode()||!settings.clientId||!tokenValid()){ showQuickTV(); return; }
   if(!tokenValid()){ await signIn(); if(!tokenValid()) return; }
   const b=$('#btnTV'); b.disabled=true; b.textContent='Syncing…';
   try{ const pid=await syncPlaylist(); showTV(pid); }catch(e){ toast('Sync failed: '+(e.message||e)); }
   b.disabled=false; b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Send to TV';
 };
+function quickUrl(){ return 'https://www.youtube.com/watch_videos?video_ids='+queue.slice(0,50).map(q=>q.id).join(','); }
+function showQuickTV(){
+  const canSync = !demoMode() && settings.clientId;
+  $('#tvbody').innerHTML=`<p style="color:var(--fg-2);margin-top:0">Opens tonight's ${queue.length} videos in YouTube as one queue, in this order. No sign-in needed.</p>
+    <a class="btn primary block" href="${quickUrl()}" target="_blank" rel="noopener">Play on YouTube</a>
+    <ol class="steps" style="margin-top:14px"><li>In YouTube, tap the cast icon and pick your TV.</li><li>Want changes later? Reorder here and tap Play on YouTube again.</li></ol>
+    ${canSync?'<button class="btn block" style="margin-top:14px" id="btnSyncInstead">Sign in to keep a Tonight playlist instead</button>':''}`;
+  openSheet('tvsheet'); const b=$('#btnSyncInstead'); if(b) b.onclick=()=>signIn();
+}
 function showTV(pid,msg){
   const b=$('#tvbody');
   b.innerHTML = msg ? `<p style="color:var(--fg-2)">${esc(msg)}</p><button class="btn primary block" onclick="openSheet('ssheet')">Open settings</button>`
    : `<p style="color:var(--fg-2);margin-top:0">Your <b>Tonight</b> playlist on YouTube now matches the queue (${queue.length} videos).</p>
       <ol class="steps"><li>On the TV, open YouTube → <b>Library</b> → <b>Playlists</b> → <b>Tonight</b> → Play.</li><li>Keep swiping here. Hit Send to TV again whenever you add or reorder.</li><li>If the TV doesn't pick up a new order mid-playlist, restart the playlist from Library.</li></ol>
       <a class="btn block" style="margin-top:16px" href="https://www.youtube.com/playlist?list=${encodeURIComponent(pid)}" target="_blank" rel="noopener">Open playlist on this phone (and cast)</a>
+      <a class="btn block" style="margin-top:8px" href="${quickUrl()}" target="_blank" rel="noopener">Or play as a quick queue</a>
       <button class="btn ghost block" style="margin-top:8px" id="btnWatched">Mark all as watched &amp; clear</button>`;
   openSheet('tvsheet');
   const w=$('#btnWatched'); if(w) w.onclick=()=>{ queue=[]; LS.set('queue',queue); renderQ(); closeSheets(); toast('Queue cleared. Sync again tonight to empty the playlist.'); };
@@ -844,16 +871,17 @@ function showTV(pid,msg){
 const REDIRECT = location.origin + location.pathname.replace(/index\.html$/,'');
 async function signIn(){
   if(!settings.clientId){ toast('Add your OAuth client ID first'); openSheet('ssheet'); return; }
-  const state=uid()+uid(); try{ sessionStorage.setItem('lanes:oauthState',state); }catch(e){}
+  const state=uid()+uid(); try{ localStorage.setItem('lanes:oauthState',state); }catch(e){}
   const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
   Object.entries({ client_id:settings.clientId, redirect_uri:REDIRECT, response_type:'token', scope:'https://www.googleapis.com/auth/youtube', include_granted_scopes:'true', state }).forEach(([k,v])=>u.searchParams.set(k,v));
   location.href=u.toString();
 }
 (function handleRedirect(){
-  if(!/access_token=/.test(location.hash)) return;
-  const p=new URLSearchParams(location.hash.slice(1)); let st=''; try{ st=sessionStorage.getItem('lanes:oauthState')||''; }catch(e){}
+  if(!/(access_token|error)=/.test(location.hash)) return;
+  const p=new URLSearchParams(location.hash.slice(1)); let st=''; try{ st=localStorage.getItem('lanes:oauthState')||''; localStorage.removeItem('lanes:oauthState'); }catch(e){}
   history.replaceState(null,'',location.pathname+location.search);
-  if(p.get('state')!==st){ toast('Sign-in could not be verified'); return; }
+  if(p.get('error')){ const why={access_denied:'Google refused the sign-in. In Google Cloud → OAuth consent screen, add your Gmail under Test users, then try again.'}[p.get('error')]||('Google sign-in failed: '+p.get('error')); setTimeout(()=>toast(why),300); return; }
+  if(!st || p.get('state')!==st){ setTimeout(()=>toast('Sign-in could not be verified. Tap Sign in again.'),300); return; }
   auth={ token:p.get('access_token'), exp:Date.now()+(+p.get('expires_in')||3600)*1000 }; saveAuth();
   for(const k in rt){ if(/sign in/i.test(rt[k].error||'')) rt[k].error=null; }
   setTimeout(()=>toast('Signed in to YouTube'),300);
@@ -880,6 +908,19 @@ $('#btnSaveSettings').onclick=()=>{
 function copyText(txt, el){ return async ()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied'); }catch(e){ const r=document.createRange(); r.selectNodeContents(el()); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } }; }
 $('#btnCopyOrigin').onclick=copyText(()=>location.origin, ()=>$('#originCode'));
 $('#btnCopyRedirect').onclick=copyText(()=>REDIRECT, ()=>$('#redirectCode'));
+$('#btnCheck').onclick=async ()=>{
+  const out=$('#checkOut'); out.hidden=false; out.innerHTML='<div class="ck na"><b>…</b><span>Checking…</span></div>';
+  const key=$('#apiKey').value.trim(), cid=$('#clientId').value.trim(); const rows=[];
+  const row=(cls,txt)=>rows.push(`<div class="ck ${cls}"><b>${cls==='ok'?'✓':cls==='bad'?'!':'–'}</b><span>${esc(txt)}</span></div>`);
+  if(!key) row('bad','No API key yet. Paste it above.');
+  else { const saved=settings.apiKey; settings.apiKey=key; try{ await yt('videos',{part:'id',chart:'mostPopular',regionCode:'US',maxResults:1}); row('ok','API key works.'); }catch(e){ row('bad', e.message); } settings.apiKey=saved; }
+  if(!cid) row('na','No OAuth client ID. Subscriptions, Liked and Send to TV need it.');
+  else if(!/\.apps\.googleusercontent\.com$/.test(cid)) row('bad','The client ID should end in .apps.googleusercontent.com. Copy the Client ID, not the Client secret.');
+  else row('ok','Client ID looks right. Make sure Google Cloud lists '+location.origin+' under JavaScript origins and '+REDIRECT+' under redirect URIs.');
+  if(!tokenValid()) row('na','Not signed in. Tap Sign in at the top of Settings.');
+  else { try{ const j=await yt('channels',{part:'snippet',mine:true},{auth:true}); const ch=(j.items||[])[0]; row('ok', ch? 'Signed in as '+ch.snippet.title+'.' : 'Signed in, but this account has no YouTube channel yet.'); }catch(e){ row('bad', e.message==='AUTH'?'Your sign-in expired. Tap Sign in again.':e.message); } }
+  out.innerHTML=rows.join('');
+};
 $('#btnResetSeen').onclick=()=>{ seen={}; hidden={}; LS.set('seen',seen); LS.set('hidden',hidden); loadSettingsUI(); render(); toast('Reset'); };
 $('#btnResetCache').onclick=()=>{ Object.keys(localStorage).filter(k=>k.startsWith('lanes:cache:')).forEach(k=>localStorage.removeItem(k)); for(const k in rt) delete rt[k]; render(); toast('Feeds cleared'); };
 
